@@ -1,0 +1,91 @@
+/* Mix stage hues with the active theme's border/surface, keeping both themes calm. */
+[data-stage="backlog"] { --kb-stage-ink: #7d8797; }
+[data-stage="todo"] { --kb-stage-ink: #8584b8; }
+[data-stage="working"] { --kb-stage-ink: #628eb7; }
+[data-stage="review"] { --kb-stage-ink: #af925c; }
+[data-stage="done"] { --kb-stage-ink: #659a83; }
+[data-stage="cancelled"] { --kb-stage-ink: #b17b87; }
+
+.kb-stage-heading[data-stage] {
+  --kb-stage-frame: color-mix(in srgb, var(--kb-stage-ink, #7d8797) 45%, var(--border));
+  --kb-stage-wash: color-mix(in srgb, var(--kb-stage-ink, #7d8797) 5%, var(--background));
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.5rem;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--kb-stage-frame);
+  border-radius: 8px;
+  background: var(--kb-stage-wash);
+  color: var(--foreground);
+  font: 600 12px/1.4 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+.kb-stage-heading[data-stage] > .kb-stage-name {
+  display: block;
+  min-width: 0;
+  padding-inline: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.kb-stage-heading[data-stage] > .kb-stage-count {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-width: 0;
+  padding: 0 3px;
+  border-inline-start: 1px solid var(--kb-stage-frame);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+button.kb-stage-heading[data-stage]:hover,
+.kb-stage-heading[data-stage]:is([aria-pressed="true"], [data-state="open"], [data-highlighted], [data-state="checked"]) {
+  background: color-mix(in srgb, var(--kb-stage-ink, #7d8797) 11%, var(--background));
+  border-color: color-mix(in srgb, var(--kb-stage-ink, #7d8797) 65%, var(--border));
+  color: var(--foreground);
+}
+.kb-stage-tab { width: 13rem; }
+.kb-stage-tab[aria-pressed="true"] { box-shadow: inset 0 -2px var(--kb-stage-frame); }
+/* The vertical lane label already names folded stages, so show only the count here. */
+.kb-column-toggle.kb-stage-heading[data-stage][data-folded="true"] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+}
+.kb-stage-heading[data-stage][data-folded="true"] > .kb-stage-count {
+  border-inline-start: 0;
+  border-block-start: 0;
+}
+.kb-stage-heading[data-stage].kb-stage-option {
+  grid-template-columns: minmax(0, 1fr) 3.5rem 20px;
+  height: 44px;
+  margin-block: 4px;
+}
+.kb-stage-heading.kb-stage-option .kb-stage-selected { width: 20px; }
+
+@media (max-width: 760px), (pointer: coarse) and (max-width: 950px) {
+  @container kanban (max-width: 739px) {
+    .kb-mobile-stage-nav .kb-stage-current.kb-stage-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 3.5rem 16px;
+      height: 44px;
+      padding: 0;
+      gap: 0;
+      border-radius: 8px;
+    }
+    .kb-stage-current.kb-stage-heading > .kb-stage-count { padding: 0 3px; border-radius: 0; background: transparent; }
+    .kb-mobile-stage-nav .kb-stage-current.kb-stage-heading:hover,
+    .kb-mobile-stage-nav .kb-stage-current.kb-stage-heading[data-state="open"] {
+      background: color-mix(in srgb, var(--kb-stage-ink) 11%, var(--background));
+    }
+  }
+}

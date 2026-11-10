@@ -1,0 +1,61 @@
+/* This row is a sibling of native main-tab chrome. Never move native React nodes. */
+[data-kb-artifact-native="true"] { display: none !important; }
+[data-kb-active-home="true"] { background: var(--state-active, var(--accent)); color: var(--foreground); }
+.kb-artifact-mount { min-width: 0; flex: none; container-type: inline-size; container-name: artifacts; }
+.kb-artifact-row {
+  position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+  min-width: 0; min-height: 40px; padding: 4px 10px;
+  border-bottom: 1px solid var(--border); background: var(--sidebar, var(--background));
+  color: var(--foreground); font: 12px/1.4 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+.kb-artifact-row .kb-artifact-caption { gap: 6px; color: var(--muted-foreground); font-size: 11px; padding-inline: 6px; }
+.kb-artifact-count { color: var(--muted-foreground); font-size: 10px; font-variant-numeric: tabular-nums; }
+.kb-artifact-caption[aria-expanded="true"] { background: var(--state-active, var(--accent)); color: var(--foreground); }
+.kb-artifact-row svg { flex: none; width: 14px; height: 14px; }
+.kb-artifact-caption svg { width: 13px; height: 13px; }
+.kb-artifact-strip {
+  display: flex; flex: 1 1 0; align-items: center; gap: 4px; min-width: 0; height: 32px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; padding: 1px;
+}
+.kb-artifact-strip::-webkit-scrollbar { display: none; }
+.kb-artifact-row button { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; min-height: 28px; flex: none; border-radius: 5px; padding: 4px 8px; white-space: nowrap; }
+.kb-artifact-row button:hover { background: var(--state-hover, var(--accent)); }
+.kb-artifact-row button:focus-visible, .kb-artifact-row input:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.kb-artifact-tab { display: flex; align-items: center; flex: none; height: 30px; border: 1px solid transparent; border-radius: 6px; color: var(--muted-foreground); }
+.kb-artifact-tab > [role="tab"] { min-width: 0; max-width: 220px; justify-content: start; }
+.kb-artifact-tab:hover, .kb-artifact-tab:focus-within { background: var(--state-hover, var(--accent)); color: var(--foreground); }
+.kb-artifact-tab[data-active="true"], .kb-artifact-home[aria-selected="true"] { color: var(--foreground); background: var(--state-active, var(--accent)); border-color: var(--border); }
+.kb-artifact-tab[data-active="true"] > [role="tab"] { font-weight: 500; }
+.kb-artifact-title { overflow: hidden; text-overflow: ellipsis; }
+.kb-artifact-type { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
+.kb-artifact-row .kb-artifact-home { height: 30px; border: 1px solid transparent; color: var(--muted-foreground); }
+.kb-artifact-row .kb-artifact-home[aria-selected="true"] { color: var(--foreground); border-color: var(--border); }
+.kb-artifact-row .kb-artifact-close { width: 22px; height: 22px; min-height: 22px; padding: 4px; margin-inline-end: 3px; color: var(--muted-foreground); opacity: 0; }
+.kb-artifact-close svg { width: 12px; height: 12px; }
+.kb-artifact-tab:is(:hover, :focus-within, [data-active="true"]) .kb-artifact-close { opacity: 1; }
+/* In flow: native BrowserViews resize below this list instead of covering it. */
+.kb-artifact-menu { flex: 1 0 100%; min-width: 0; padding: 8px 0 4px; border-top: 1px solid var(--border); }
+.kb-artifact-menu input { width: 100%; height: 32px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--background); }
+.kb-artifact-menu-items { max-height: min(280px, 30vh); overflow: auto; padding-top: 6px; }
+.kb-artifact-empty { padding: 12px 8px; color: var(--muted-foreground); }
+.kb-artifact-menu-item { display: flex; align-items: center; gap: 4px; }
+.kb-artifact-menu-item > button:first-child { flex: 1; min-width: 0; height: auto; min-height: 44px; justify-content: start; text-align: start; }
+.kb-artifact-menu-item span { display: block; min-width: 0; flex: 1; }
+.kb-artifact-menu-item strong, .kb-artifact-menu-item small { display: block; overflow: hidden; text-overflow: ellipsis; font-weight: 400; }
+.kb-artifact-menu-item small { color: var(--muted-foreground); font-size: 11px; }
+.kb-artifact-menu-item [aria-pressed="true"] { background: var(--accent); }
+.kb-browser-content { display: flex; flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
+.kb-browser-address { flex: none; display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.kb-browser-address input { flex: 1; width: 0; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--background); }
+.kb-browser-address button { padding: 6px; border-radius: 4px; }
+.kb-browser-address svg { width: 16px; height: 16px; }
+.kb-browser-address button:disabled { opacity: .4; }
+.kb-browser-address button:focus-visible, .kb-browser-address input:focus-visible { outline: 2px solid var(--ring); }
+.kb-browser-status { max-width: 120px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted-foreground); }
+.kb-browser-viewport { flex: 1; min-height: 80px; }
+.kb-browser-unavailable { margin: auto; padding: 24px; text-align: center; max-width: 500px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.kb-browser-unavailable p { margin-top: 12px; font-size: 12px; }
+@container artifacts (max-width: 620px) { .kb-browser-status { display: none; } }
+@container artifacts (max-width: 440px) { .kb-artifact-row { padding-inline: 6px; gap: 4px; } .kb-artifact-tab > [role="tab"] { max-width: 170px; } }
+@media (hover: none) { .kb-artifact-row .kb-artifact-close { opacity: 1; } }
+@media (pointer: coarse) { .kb-artifact-row { min-height: 48px; } .kb-artifact-strip { height: 40px; } .kb-artifact-row button, .kb-artifact-row .kb-artifact-home { height: 36px; min-height: 36px; } .kb-artifact-tab { height: 38px; } .kb-artifact-row .kb-artifact-close { width: 30px; height: 30px; min-height: 30px; } }

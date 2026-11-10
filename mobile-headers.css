@@ -1,0 +1,128 @@
+/* Header controls follow the native mobile status bar's surface and states.
+   Keep desktop geometry and the status bar itself independent of this sheet. */
+.kb-mobile-stage-nav, .kb-mobile-board-menu, .kb-mobile-filter-caption, .kb-mobile-search,
+.kb-mobile-tool-icon, .kb-mobile-task-view, .kb-mobile-section-picker, .kb-mobile-workspace-heading,
+.kb-task-only-nav { display: none; }
+
+.kb-stage-menu {
+  z-index: 120; width: min(20rem, calc(100vw - 24px));
+  max-height: var(--radix-dropdown-menu-content-available-height); overflow-y: auto;
+  overscroll-behavior: contain; padding: 4px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--popover, var(--background)); color: var(--popover-foreground, var(--foreground));
+  box-shadow: 0 6px 24px #0005; font-family: var(--font-sans, sans-serif);
+}
+.kb-stage-menu-label { padding: 6px 10px; color: var(--muted-foreground); font-size: .75rem; }
+.kb-stage-option {
+  display: grid; grid-template-columns: 6px minmax(0, 1fr) auto 20px; align-items: center; gap: 10px;
+  min-height: 44px; padding: 8px 10px; border-radius: 4px; outline: none; font-size: .875rem; cursor: pointer;
+}
+.kb-stage-option:is([data-highlighted], [data-state="checked"]) { background: var(--accent); }
+.kb-stage-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; }
+.kb-stage-name { min-width: 0; overflow-wrap: anywhere; }
+.kb-stage-count { font-size: .8125rem; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.kb-stage-selected { width: 20px; display: flex; justify-content: center; }
+
+@media (max-width: 760px), (pointer: coarse) and (max-width: 950px) {
+  .kb-filter-popover {
+    width: min(24rem, calc(100vw - 24px));
+    max-height: min(calc(100dvh - 24px), var(--radix-popover-content-available-height));
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  .kb-mobile-search { display: block; }
+  .kb-mobile-search input { min-height: 44px; height: auto; font-size: 1rem; }
+  .kb-active-filters { overflow-wrap: anywhere; }
+  .kb-filter-popover :is(select, button, label:has(input[type="checkbox"])) {
+    min-height: 44px; height: auto;
+  }
+  .kb-filter-popover select { font-size: 1rem; }
+  .kb-menu { max-height: var(--radix-dropdown-menu-content-available-height); overflow-y: auto; }
+  .kb-menu [role="menuitem"] { min-height: 44px; display: flex; align-items: center; }
+
+  @container kanban (max-width: 739px) {
+    .kb-toolbar { padding: 2px 8px; gap: 0; background: var(--sidebar, var(--background)); }
+    .kb-toolbar-heading { display: none; }
+    .kb-toolbar-controls { grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1.15fr) 44px; gap: 4px; }
+    .kb-toolbar-controls > .kb-create-project { width: 44px; min-height: 44px; padding: 0; }
+    .kb-toolbar-controls > .kb-search, .kb-select-tasks, .kb-desktop-filter-label { display: none; }
+    .kb-toolbar-controls > select, .kb-toolbar-controls > .kb-filter-trigger {
+      min-width: 0; min-height: 44px; height: auto; padding: 4px;
+      border: 0; border-radius: 4px; background: transparent; color: var(--foreground);
+      font-size: .8125rem;
+    }
+    .kb-toolbar-controls > .kb-filter-trigger { justify-content: start; gap: 5px; }
+    .kb-mobile-filter-caption { display: flex; flex-direction: column; min-width: 0; text-align: start; line-height: 1.3; }
+    .kb-mobile-filter-caption > span:first-child { font-size: .75rem; overflow: hidden; text-overflow: ellipsis; }
+    .kb-mobile-filter-caption > span:last-child { font-size: .6875rem; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; }
+    .kb-filter-trigger:has(.kb-badge) { color: var(--primary); }
+    .kb-mobile-board-menu { display: block; }
+    .kb-mobile-board-menu .kb-icon-button { width: 44px; height: auto; min-height: 44px; color: var(--foreground); }
+    .kb-stage-picker { display: none; }
+    .kb-mobile-stage-nav {
+      display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: stretch;
+      flex: none; gap: 4px; padding: 0 8px; background: var(--sidebar, var(--background));
+    }
+    .kb-mobile-stage-nav button {
+      display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 44px;
+      padding: 6px 8px; border-radius: 4px; color: var(--foreground); font-size: .875rem;
+    }
+    .kb-mobile-stage-nav .kb-stage-current { gap: 8px; text-align: start; }
+    .kb-stage-current .kb-stage-name { flex: 1; }
+    .kb-stage-current .kb-stage-count { padding: 1px 5px; border-radius: 4px; background: var(--muted); }
+    .kb-stage-previous > svg { transform: rotate(-90deg); }
+    .kb-stage-next > svg { transform: rotate(90deg); }
+    .kb-stage-caret { display: flex; transform: rotate(180deg); }
+    .kb-mobile-stage-nav button:disabled { opacity: .35; cursor: default; }
+    .kb-mobile-stage-nav button:enabled:hover, .kb-stage-current[data-state="open"] { background: var(--accent); }
+    .kb-mobile-stage-nav button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+    .kb-toolbar-controls > :is(select, button):hover, .kb-mobile-board-menu button:hover { background: var(--accent); }
+    .kb-toolbar :is(button, select):focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+  }
+
+  @container detail (max-width: 739px) {
+    .kb-detail-heading {
+      grid-template-columns: minmax(0, 1fr) auto; gap: 4px;
+      padding: 2px 8px; background: var(--sidebar, var(--background));
+    }
+    .kb-scroll-title {
+      display: flex; align-items: center; min-height: 44px;
+      min-width: 0; max-width: 100%; margin: 0;
+      white-space: nowrap; overflow-wrap: normal; overflow-x: auto; overflow-y: hidden;
+      overscroll-behavior-x: contain; scrollbar-width: none;
+      font-size: .875rem; line-height: 1.5; font-weight: 500; color: var(--muted-foreground);
+    }
+    .kb-scroll-title::-webkit-scrollbar { display: none; }
+    .kb-scroll-title:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+    .kb-detail-actions { gap: 0; }
+    .kb-detail-actions > [aria-label="Связи"] { display: none; }
+    .kb-detail-actions .kb-icon-button { width: 44px; height: auto; min-height: 44px; color: var(--foreground); }
+    .kb-detail-status { min-height: 44px; padding-inline: 4px; border: 0; gap: 4px; }
+    .kb-detail-status select { min-width: 0; max-width: 8rem; min-height: 44px; font-size: .75rem; }
+    .kb-detail-nav-row {
+      display: flex; flex-wrap: nowrap; gap: 4px; padding: 0 8px;
+      background: var(--sidebar, var(--background));
+    }
+    .kb-detail-sections { min-width: 0; flex-wrap: nowrap; gap: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+    .kb-detail-sections button { flex: none; min-height: 44px; padding: 4px 8px; font-size: .8125rem; }
+    .kb-detail-tools { flex: none; min-width: 44px; min-height: 44px; padding: 4px 8px; border: 0; }
+    .kb-detail-tools .kb-tool-label, .kb-detail-tools:has(.kb-mobile-tool-icon) .kb-detail-caret { display: none; }
+    .kb-mobile-tool-icon { display: inline-flex; }
+    .kb-detail-tools:has(.kb-mobile-tool-icon) { display: inline-flex; align-items: center; justify-content: center; }
+    .kb-detail-actions button:hover, .kb-detail-tools:hover { background: var(--accent); }
+    .kb-detail > header .kb-detail-subnav, .kb-detail-chat-picker { display: none; }
+    /* Task subsections share the navigation row instead of adding a third row. */
+    .kb-detail-nav-row[data-task-view="true"] .kb-detail-sections { display: none; }
+    .kb-mobile-task-view, .kb-mobile-section-picker {
+      flex: 1; min-width: 0; width: 100%; min-height: 44px; padding: 4px 8px;
+      color: var(--foreground); background: transparent; font-size: 1rem;
+    }
+    .kb-mobile-task-view { display: block; }
+    :is(.kb-mobile-task-view, .kb-mobile-section-picker) :is(option, optgroup) { background: var(--background); }
+    .kb-mobile-workspace-heading { display: flex; align-items: center; min-height: 48px; padding: 2px 12px; background: var(--sidebar, var(--background)); }
+  }
+  /* rem follows the user's text size: large text gets a complete labelled
+     selector instead of clipped navigation tabs, including narrow split panes. */
+  @container detail (max-width: 19rem) {
+    .kb-detail-nav-row .kb-detail-sections { display: none; }
+    .kb-mobile-section-picker { display: block; }
+  }
+}
