@@ -1,0 +1,282 @@
+/* Content chrome only: never style the board/list toolbar or BB's native tabs.
+   Scope to the new markup so an isolated QA plugin cannot restyle old panels. */
+.kb-detail > [data-kanban-heading="compact"] {
+  --kb-panel-inset: 12px;
+  --kb-panel-control: 32px;
+  min-width: 0;
+  flex: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px var(--kb-panel-inset) 6px;
+  background: transparent;
+}
+.kb-panel-identity { flex: 1; min-width: 0; }
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: 0;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  line-height: 1.4;
+}
+/* Full text remains available to heading navigation and in the native tab's
+   accessible name. A non-interactive heading does not add an extra Tab stop. */
+.kb-detail > [data-kanban-heading="compact"] .kb-header-context {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 16px;
+}
+.kb-panel-utility, .kb-panel-status { display: flex; align-items: center; min-width: 0; }
+.kb-panel-utility { flex: none; gap: 6px; max-width: 100%; }
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-status {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: var(--kb-panel-control);
+  gap: 5px;
+  padding-inline: 7px 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-status select {
+  min-width: 0;
+  max-width: 7.5rem;
+  min-height: calc(var(--kb-panel-control) - 2px);
+  font-family: inherit;
+  font-size: 12px;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-status:has(select:enabled):hover { background: var(--accent); }
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-status:has(select:disabled) { opacity: .5; }
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+.kb-detail > [data-kanban-heading="compact"] :is(.kb-icon-button, .kb-detail-tools) {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--kb-panel-control);
+  height: var(--kb-panel-control);
+  min-height: var(--kb-panel-control);
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  background: transparent;
+  font-size: 12px;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-mobile-tool-icon { display: inline-flex; }
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-tools :is(.kb-tool-label, .kb-detail-caret) { display: none; }
+.kb-detail > [data-kanban-heading="compact"] :is(.kb-icon-button, .kb-detail-tools):is(:hover, [data-state="open"]) {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-nav-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-height: 0;
+  padding: 0 var(--kb-panel-inset) 8px;
+  border: 0;
+  background: transparent;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-task-only-nav { display: none; }
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-sections {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--muted);
+  scrollbar-width: thin;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-sections button {
+  flex: 1 0 auto;
+  min-height: calc(var(--kb-panel-control) - 4px);
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 4px;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-sections button[aria-pressed="true"] {
+  background: var(--background);
+  color: var(--foreground);
+  font-weight: 600;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-subnav {
+  display: block;
+  padding: 4px var(--kb-panel-inset) 6px;
+  border: 0;
+  background: transparent;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-subsections {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-subsections button {
+  flex: none;
+  min-height: 28px;
+  margin: 0;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-subsections button[aria-pressed="true"] {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-chat-picker {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--kb-panel-inset) 6px;
+  border: 0;
+  font-size: 12px;
+}
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-chat-picker > span { flex: none; color: var(--muted-foreground); }
+.kb-detail > [data-kanban-heading="compact"] .kb-detail-chat-picker select {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: var(--kb-panel-control);
+  padding-block: 3px;
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+.kb-detail > [data-kanban-heading="compact"] :is(button, select, .kb-detail-title):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.kb-detail > [data-kanban-heading="compact"] button:disabled { opacity: .45; cursor: default; }
+.kb-detail > [data-kanban-heading="compact"] :is(.kb-mobile-section-picker, .kb-mobile-task-view) { display: none; }
+
+@container detail (max-width: 760px) {
+  /* Context remains the heading's accessible description without taking a row. */
+  .kb-detail > [data-kanban-heading="compact"] .kb-header-context {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-status select { max-width: 6.5rem; }
+}
+@container detail (max-width: 360px) {
+  .kb-detail > [data-kanban-heading="compact"] { --kb-panel-inset: 8px; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-status select { max-width: 4.5rem; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-nav-row,
+  .kb-detail > [data-kanban-heading="compact"] .kb-task-only-nav { display: flex; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-nav-row .kb-detail-sections,
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-subnav { display: none; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-nav-row :is(.kb-mobile-section-picker, .kb-mobile-task-view) {
+    display: block; flex: 1; min-width: 0; width: 100%;
+    height: var(--kb-panel-control); min-height: var(--kb-panel-control);
+    padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--background); color: var(--foreground); font-size: 13px;
+  }
+}
+@media (max-width: 760px), (pointer: coarse) and (max-width: 950px) {
+  /* BB's native tab already supplies the card title. Use one 48px toolbar
+     beneath it rather than repeating that title and a second navigation row. */
+  .kb-detail > [data-kanban-heading="compact"] {
+    --kb-panel-control: 44px; --kb-panel-inset: 8px;
+    display: flex; align-items: center; gap: 6px; padding: 2px 8px;
+  }
+  .kb-detail > [data-kanban-heading="compact"] :is(.kb-detail-heading, .kb-panel-utility) { display: contents; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-panel-identity {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-title { display: block; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-panel-status { order: 2; flex: none; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-status select { max-width: 4.5rem; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-actions { order: 3; flex: none; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-nav-row {
+    display: flex; order: 1; flex: 1; min-width: 0; padding: 0;
+  }
+  .kb-detail > [data-kanban-heading="compact"] :is(.kb-detail-sections, .kb-detail-subnav, .kb-detail-chat-picker) { display: none; }
+  .kb-detail > [data-kanban-heading="compact"] .kb-detail-nav-row :is(.kb-mobile-section-picker, .kb-mobile-task-view) {
+    display: block; width: 100%; min-width: 0; min-height: 44px; height: 44px;
+    padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--background); color: var(--foreground); font-size: 13px;
+  }
+}
+/* The same controls become a scrollable navigation stack in the right rail. */
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-heading { flex-direction: column; align-items: stretch; padding: 10px; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-panel-identity { flex-basis: auto; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-title { -webkit-line-clamp: 3; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-header-context {
+  position: static; width: auto; height: auto; margin: 0; clip-path: none; white-space: normal;
+}
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-panel-utility { display: flex; flex-wrap: wrap; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-panel-status { order: 0; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-actions { margin: 0; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-nav-row { display: flex; padding: 0 10px 8px; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-nav-row select { display: none; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-sections { display: flex; flex-direction: column; overflow: visible; gap: 2px; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-sections button { text-align: start; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-subnav { display: block; padding: 4px 10px 8px; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-subsections { flex-direction: column; align-items: stretch; overflow: visible; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-subsections button { white-space: normal; text-align: start; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-chat-picker { flex-direction: column; align-items: stretch; padding: 4px 10px 8px; }
+[data-kanban-header-side="right"] .kb-detail > [data-kanban-heading="compact"] .kb-detail-chat-picker select { width: 100%; flex: auto; }
+
+/* Diff controls belong to the content pane, even when its header is in a rail. */
+.kb-detail:has(> [data-kanban-heading="compact"]) .kb-diff-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-block: 6px;
+}
+.kb-detail:has(> [data-kanban-heading="compact"]) .kb-diff-toolbar .kb-detail-subsections {
+  flex: 1 1 20rem; min-width: 0; flex-wrap: nowrap; overflow-x: auto;
+  overscroll-behavior-x: contain; scrollbar-width: thin;
+}
+.kb-detail:has(> [data-kanban-heading="compact"]) .kb-diff-toolbar .kb-detail-subsections button { flex: none; white-space: nowrap; }
+.kb-detail:has(> [data-kanban-heading="compact"]) .kb-diff-actions { display: flex; flex-wrap: wrap; gap: 4px; }

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "bb-kanban": {
+      "command": "node",
+      "args": [
+        "C:/BBPlugins/bb-plugin-thread-kanban/mcp.mjs"
+      ]
+    }
+  }
+}

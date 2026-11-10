@@ -1,0 +1,102 @@
+{
+  "name": "bb-plugin-thread-kanban",
+  "version": "0.2.1",
+  "type": "module",
+  "scripts": {
+    "mcp": "node mcp.mjs",
+    "test:agents": "node --test agent.test.mjs mcp.test.mjs",
+    "build": "bb plugin build",
+    "test": "node --test --test-force-exit *.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "release:check": "node scripts/release-check.mjs"
+  },
+  "engines": {
+    "bb": ">=0.49",
+    "bbPluginSdk": ">=0.6.132"
+  },
+  "bb": {
+    "name": "Канбан",
+    "description": "Plan tasks and follow agent work on a project board with integrated settings and a Codex task assistant.",
+    "branding": {
+      "icon": "./assets/board.svg"
+    },
+    "server": "./server.ts",
+    "host": "./host.ts",
+    "app": "./app.tsx"
+  },
+  "dependencies": {
+    "@get-bb/plugin-sdk": "0.6.132",
+    "@modelcontextprotocol/server": "2.4.0",
+    "@radix-ui/react-checkbox": "^1.4.1",
+    "@radix-ui/react-slot": "^1.5.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@pierre/diffs": "~1.2.12",
+    "@radix-ui/react-alert-dialog": "^1.2.1",
+    "@radix-ui/react-context-menu": "^2.4.1",
+    "@radix-ui/react-dialog": "^1.3.1",
+    "@radix-ui/react-dropdown-menu": "^2.2.1",
+    "@radix-ui/react-hover-card": "^1.2.1",
+    "@radix-ui/react-menubar": "^1.2.1",
+    "@radix-ui/react-navigation-menu": "^1.4.1",
+    "@radix-ui/react-popover": "^1.3.1",
+    "@radix-ui/react-select": "^2.4.1",
+    "@radix-ui/react-tooltip": "^1.4.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "better-sqlite3": "^12.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cron-parser": "^5.5.0",
+    "esbuild": "^0.28.2",
+    "hono": "^4.11.9",
+    "jsdom": "^31.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sonner": "^1.7.4",
+    "tailwind-merge": "^3.7.0",
+    "typescript": "^5.7.0",
+    "vaul": "^1.1.2"
+  },
+  "license": "MIT",
+  "files": [
+    "*.ts",
+    "*.tsx",
+    "*.css",
+    "assets/",
+    "components/",
+    "hooks/",
+    "lib/",
+    "skills/",
+    "mcp.mjs",
+    "agent-inputs.mjs",
+    "mcp.example.json",
+    "README.md",
+    "PLUGIN_OVERVIEW.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "dist/app.js",
+    "dist/app.css",
+    "dist/app.meta.json",
+    "dist/server.js",
+    "dist/server.meta.json",
+    "dist/host.js",
+    "dist/host.meta.json",
+    "scripts/release-check.mjs"
+  ],
+  "description": "Plan tasks and follow agent work on a project board with integrated settings and a Codex task assistant.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrey-khudoley/bb-plugin-thread-kanban.git"
+  },
+  "homepage": "https://github.com/andrey-khudoley/bb-plugin-thread-kanban#readme",
+  "bugs": {
+    "url": "https://github.com/andrey-khudoley/bb-plugin-thread-kanban/issues"
+  }
+}
