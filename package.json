@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-thread-kanban",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "mcp": "node mcp.mjs",
@@ -16,7 +16,7 @@
   },
   "bb": {
     "name": "Канбан",
-    "description": "Plan tasks and follow agent work on a project board with integrated settings and a Codex task assistant.",
+    "description": "Канбан задач и чатов BB с помощником по постановке задач, встроенными настройками и проверкой изменений.",
     "branding": {
       "icon": "./assets/board.svg"
     },
@@ -28,6 +28,7 @@
     "@get-bb/plugin-sdk": "0.6.132",
     "@modelcontextprotocol/server": "2.4.0",
     "@radix-ui/react-checkbox": "^1.4.1",
+    "@radix-ui/react-popover": "^1.3.1",
     "@radix-ui/react-slot": "^1.5.0",
     "zod": "^4.6.5"
   },
@@ -41,7 +42,6 @@
     "@radix-ui/react-hover-card": "^1.2.1",
     "@radix-ui/react-menubar": "^1.2.1",
     "@radix-ui/react-navigation-menu": "^1.4.1",
-    "@radix-ui/react-popover": "^1.3.1",
     "@radix-ui/react-select": "^2.4.1",
     "@radix-ui/react-tooltip": "^1.4.1",
     "@testing-library/react": "^16.3.3",
@@ -78,6 +78,7 @@
     "agent-inputs.mjs",
     "mcp.example.json",
     "README.md",
+    "STATUS_BAR.md",
     "PLUGIN_OVERVIEW.md",
     "CHANGELOG.md",
     "LICENSE",

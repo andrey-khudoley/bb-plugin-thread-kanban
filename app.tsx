@@ -33,6 +33,7 @@ import { CardMenu, isCardBackgroundClick, KanbanIcon, TagBadge, ViewSwitch, type
 import { contextActions, DeriveDialog, type DeriveDialogRequest, type OpenDerivation } from "./derive-dialog";
 import { useDerivationActivity } from "./derive-activity";
 import { StatusContribution } from "./status-contribution";
+import { GlobalStatusBar } from './status-bar';
 import { IssueTree, issueTitle } from "./issue-tree";
 import { useChatTree, type ChatNode } from "./chat-tree";
 import { archiveChanged, archiveRpc } from "./chat-archive";
@@ -602,24 +603,24 @@ function OperationDialog({ operation, index, close, changed }: { operation: Oper
 
 function KanbanPage({ subPath }: { subPath: string }) {
   const surface = useRef<HTMLDivElement>(null);
+  const issues = useIssues();
   const merge = /^merges(?:\/([\da-f-]{36}))?$/i.exec(subPath);
   return <div ref={surface} data-kanban-board-surface className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
     <WindowPlacementBridge surface={surface} />
-    <PanelContextBridge surface={surface} />
+    <PanelContextBridge surface={surface} issues={issues.data} />
     {merge
     ? <MergeCenter key={merge[1] ?? "history"} id={merge[1]} initialProjectId={readViewPreferences().projectId} />
-    : <KanbanBoard subPath={subPath} />}
+    : <KanbanBoard subPath={subPath} issueQuery={issues} />}
   </div>;
 }
 
-function KanbanBoard({ subPath }: { subPath: string }) {
+function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: ReturnType<typeof useIssues> }) {
   const filterSearch = useRef<HTMLInputElement>(null);
   const navigate = useBbNavigate();
   const openMerge = useOpenMerge();
   const panel = experimental_useAppPanel();
   const portalScope = usePortalScopeProps();
   const rpc = useRpc<typeof issueRpc>();
-  const issueQuery = useIssues();
   const issues = issueQuery.data ?? [];
   const [preferences] = useState(readViewPreferences);
   const surface = useRef<HTMLElement>(null);
@@ -1389,6 +1390,7 @@ export default definePluginApp((app) => {
   } });
   app.slots.experimental_appOverlay({ id: "agent-observer", component: KanbanAgentBridge });
   app.slots.experimental_appOverlay({ id: "status-contribution", component: StatusContribution });
+  app.slots.experimental_appOverlay({ id: 'global-status-bar', component: GlobalStatusBar });
   app.slots.navPanel({
     id: "board",
     title: "Канбан",

@@ -60,6 +60,21 @@ export function createActivityStore(storage?: Storage) {
     dismiss(key: number) { runs = runs.filter(run => run.key !== key); publish(); },
     hide(key: number) { runs = runs.map(run => run.key === key ? { ...run, hidden: true } : run); publish(); },
     hideAll() { runs = runs.map(run => ({ ...run, hidden: true })); publish(); },
+    view(targets: { threadIds: readonly string[]; issueIds: readonly string[] }) {
+      let changed = false;
+      const next = runs.map(run => {
+        if (run.hidden) return run;
+        const failed = !!run.error || run.result?.status === 'failed';
+        const done = run.result?.status === 'done';
+        if (!failed && !done) return run;
+        const matches = (kind: string, id: string) => (kind === 'thread' ? targets.threadIds : targets.issueIds).includes(id);
+        const childViewed = done && run.result?.children.some(child => targets.issueIds.includes(child.id) ||
+          child.threadIds.some(id => targets.threadIds.includes(id)));
+        if (!childViewed && !((failed || !run.result?.children.length) && matches(run.selection.source.kind, run.selection.source.id))) return run;
+        changed = true; return { ...run, hidden: true };
+      });
+      if (changed) { runs = next; publish(); }
+    },
   };
 }
 

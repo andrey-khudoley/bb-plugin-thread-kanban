@@ -1,10 +1,9 @@
+import { kanbanDatabase } from './database';
 import { createHash, randomUUID } from "node:crypto";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { issueReviewInput, issueRpc, issueSchema, issuesChanged, personalProjectId, suggestionSchema, type Issue } from "./issues";
 import { emptyPlan, planSchema, withTestTag } from "./planning";
-import { derivationMigration, registerDerivations } from "./derive-server";
-import { mergeMigration } from "./merge-resolution";
-import { archiveMigration } from "./chat-archive-server";
+import { registerDerivations } from "./derive-server";
 import { mergeHostRpc, sharedReviewResolution, sharedReviewResult, worktreeChanged } from "./merge-contract";
 import type { WorkDiffs } from "./work-diff-server";
 import type { registerMerges } from "./merge-server";
@@ -19,14 +18,8 @@ const errorText = (error: unknown) => (error instanceof Error ? error.message : 
 
 export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
   inspectEnvironments: (ids: string[]) => ReturnType<ReturnType<typeof registerMerges>["inspectEnvironments"]>) {
-  const db = bb.storage.database();
-  bb.storage.migrate(db, [
-    `CREATE TABLE IF NOT EXISTS kanban_issues (id TEXT PRIMARY KEY, payload TEXT NOT NULL)`,
-    derivationMigration,
-    mergeMigration,
-    archiveMigration,
-    "CREATE TABLE IF NOT EXISTS kanban_review_workers (issue_id TEXT PRIMARY KEY, worker_id TEXT UNIQUE NOT NULL, request TEXT NOT NULL, revision TEXT NOT NULL)",
-  ]);
+  const db = kanbanDatabase(bb);
+
   const read = db.prepare("SELECT payload FROM kanban_issues WHERE id = ?");
   const scan = db.prepare("SELECT payload FROM kanban_issues");
   const remove = db.prepare("DELETE FROM kanban_issues WHERE id = ?");

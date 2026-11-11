@@ -6,6 +6,7 @@ Track BB tasks and chats on one board, prepare task descriptions with Codex, and
 - A task assistant that proposes a title and plan before you launch the work.
 - Integrated settings for panel placement, headers, and the provider, model, reasoning effort and speed of new chats.
 - Linked worker chats, Git change review and merge workflows.
+- An integrated status bar with completion and input-request notifications, dismissal, clear-all and optional sound.
 - Agent inspection tools including `kanban_snapshot`, `kanban_card_get` and `kanban_ui_snapshot`.
 
 ## How it works
@@ -18,4 +19,4 @@ Requires BB 0.49 or later and Plugin SDK 0.6.132 or later. The task assistant re
 
 The board labels and task-assistant prompts are in Russian. The separate chat-defaults plugin is not required. Existing users can migrate its settings once before disabling it. Standard BB plugin updates are supported; the developer's workspace-deploy controller is optional.
 
-Status-bar integration is optional. Without the separate status-bar plugin, BB retains its native footer.
+The former status-bar plugin is not required either. Its history, read and hidden states, event cursors and sound settings are imported once; the old plugin is disabled and its storage is kept for rollback.

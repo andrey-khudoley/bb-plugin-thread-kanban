@@ -4,6 +4,14 @@ import { usePanelSection } from './panel-section-ui';
 type Cell<T> = { value: T; listeners: Set<() => void> };
 const sections = new Map<string, Map<string, Cell<unknown>>>();
 
+/** Explicit navigation can reveal a view in an already mounted or restored section. */
+export function setPanelState(section: string, key: string, value: unknown) {
+  const cell = sections.get(section)?.get(key);
+  if (!cell || Object.is(cell.value, value)) return;
+  cell.value = value;
+  cell.listeners.forEach(listener => listener());
+}
+
 /** Preserve presentation state across native tab unmounts; data drafts have their own stores. */
 export function usePanelState<T>(key: string, initial: T | (() => T)): [T, Dispatch<SetStateAction<T>>] {
   const section = usePanelSection();

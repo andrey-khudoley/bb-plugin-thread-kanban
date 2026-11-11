@@ -15,6 +15,7 @@ import { registerStatusPanel } from "./status-navigation";
 import { ArtifactChrome, type ArtifactGroup } from './artifact-tabs';
 import { artifactStore, artifactOwner, nativeArtifactOwners } from './panel-artifacts';
 import { BrowserArtifactContent, useBrowserArtifacts } from './browser-artifacts';
+import type { Issue } from './issues';
 
 export function ContextPanel({ params }: { params: ReadonlyJsonValue | null }) {
   const id = params && typeof params === "object" && "sectionId" in params && typeof params.sectionId === "string" ? params.sectionId : null;
@@ -82,11 +83,12 @@ export function LegacyIssuePanel({ params }: { params: ReadonlyJsonValue | null 
  * The SDK exposes tabs, but no pane API. Use the mounted body for selected tabs
  * and unambiguous native labels for the rest. Leave unknown native controls intact.
  */
-export function PanelContextBridge({ surface }: { surface: RefObject<HTMLElement | null> }) {
+const noIssues: Issue[] = [];
+export function PanelContextBridge({ surface, issues = noIssues }: { surface: RefObject<HTMLElement | null>; issues?: Issue[] }) {
   const controller = experimental_useAppPanel();
   useEffect(() => {
-    if (surface.current) return registerStatusPanel(surface.current, controller);
-  }, [surface, controller]);
+    if (surface.current) return registerStatusPanel(surface.current, controller, issues);
+  }, [surface, controller, issues]);
   const snapshot = experimental_usePanelTabs();
   const [artifactGroups, setArtifactGroups] = useState<ArtifactGroup[]>([]);
   const activity = useRef(createTabActivity());

@@ -85,9 +85,9 @@ function ActivityPoll({ jobId, runKey, update }: {
   return null;
 }
 
-function ActivityRun({ run, expanded, toggle, dismiss, openTree }: {
+function ActivityRun({ run, expanded, toggle, dismiss, openTree, openCard }: {
   run: Run; expanded: boolean;
-  toggle: () => void; dismiss: () => void; openTree: (id: string) => void;
+  toggle: () => void; dismiss: () => void; openTree: (id: string) => void; openCard: (id: string) => void;
 }) {
   const detailsId = useId();
   const { result, error, selection } = run;
@@ -125,7 +125,7 @@ function ActivityRun({ run, expanded, toggle, dismiss, openTree }: {
         {done && result.children.length > 0 && <>
           <ul className="space-y-1">
             {result.children.map((issue) => <li key={issue.id}>
-              <button type="button" className="text-left text-primary hover:underline" onClick={() => openTree(issue.id)}>
+              <button type="button" className="text-left text-primary hover:underline" onClick={() => openCard(issue.id)}>
                 {issue.title}
               </button>
             </li>)}
@@ -152,13 +152,13 @@ export function DerivationPolling() {
     <ActivityPoll key={run.key} jobId={run.jobId} runKey={run.key} update={update} />);
 }
 
-export function DerivationNotifications({ openTree }: { openTree: (id: string) => void }) {
+export function DerivationNotifications({ openTree, openCard = openTree }: { openTree: (id: string) => void; openCard?: (id: string) => void }) {
   const runs = useActivityRuns();
-  return runs.filter(run => !run.hidden).map(run => <NotificationRun key={run.key} run={run} openTree={openTree} />);
+  return runs.filter(run => !run.hidden).map(run => <NotificationRun key={run.key} run={run} openTree={openTree} openCard={openCard} />);
 }
 
-function NotificationRun({ run, openTree }: { run: Run; openTree: (id: string) => void }) {
+function NotificationRun({ run, openTree, openCard }: { run: Run; openTree: (id: string) => void; openCard: (id: string) => void }) {
   const [expanded, setExpanded] = useState(true);
   return <ActivityRun run={run} expanded={expanded} toggle={() => setExpanded(value => !value)}
-    dismiss={() => activityStore().hide(run.key)} openTree={openTree} />;
+    dismiss={() => activityStore().hide(run.key)} openTree={openTree} openCard={openCard} />;
 }

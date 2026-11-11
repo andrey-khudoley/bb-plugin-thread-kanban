@@ -8,9 +8,11 @@ import { registerAgentAccess } from "./agent-server";
 import { reviewToolName } from "./review-agent";
 import { registerProjects } from "./project-server";
 import { registerSettings } from "./settings-server";
+import { registerNotifications } from './notification-server';
 
 export default function threadKanban(bb: BbPluginApi) {
   registerSettings(bb);
+  registerNotifications(bb);
   const workDiffs = registerWorkDiffs(bb);
   const issues = registerIssues(bb, workDiffs, (ids) => merges.inspectEnvironments(ids, false));
   registerProjects(bb, issues);
