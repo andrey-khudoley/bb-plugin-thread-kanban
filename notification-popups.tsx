@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Notice } from './notification-contract';
+import { noticeLabel, type Notice } from './notification-contract';
 
-export type Popup = { id: string; label: string; title: string; threadId?: string; noticeId?: string };
+export type Popup = { id: string; label: string; title: string; threadId?: string; issueId?: string; noticeId?: string };
 
 /** Per-window session state. Observing history or reconnecting never replays old popups. */
 export function createArrivalTracker(storage?: Pick<Storage, 'getItem' | 'setItem'>, startedAt = Date.now()) {
@@ -26,7 +26,7 @@ export function createArrivalTracker(storage?: Pick<Storage, 'getItem' | 'setIte
         if (!claim(notice.id)) continue;
         if (notice.readAt !== null || notice.createdAt < startedAt) continue;
         fresh.push({ id: notice.id, noticeId: notice.id, threadId: notice.threadId, title: notice.title,
-          label: notice.kind === 'question' ? 'Требуется ответ' : 'Работа завершена' });
+          ...(notice.issueId && { issueId: notice.issueId }), label: noticeLabel(notice) });
       }
       return fresh;
     },

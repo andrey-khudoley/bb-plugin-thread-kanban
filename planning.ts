@@ -16,6 +16,11 @@ export function withTestTag(tags: string[]) {
   return [testTag, ...tags.filter((tag) => !isTestTag(tag)).slice(0, maxTags - 1)];
 }
 
+// A new card is a test fixture only when its creator explicitly requests it.
+export function tagsForNewCard(tags: string[], test = false) {
+  return test ? withTestTag(tags) : tags.filter((tag) => !isTestTag(tag));
+}
+
 export const planSchema = z.object({
   notes: z.string().max(12000).default(""),
   priority: z.enum(["urgent", "high", "normal", "low"]).nullable().default(null),

@@ -8,6 +8,9 @@ import { issueStages, type Issue } from "./issues";
 import { WorktreeBadge, type WorktreeStatuses } from "./merge-ui";
 import { isTestTag, testTag } from "./planning";
 import { useChatHighlight } from "./open-chats-ui";
+import { useCardActivities } from './card-activity-ui';
+import { linkedWorkStartedAt } from './card-work-time';
+import { CardWorkTime } from './card-work-time-ui';
 
 export function issueAncestors(issue: Issue, issues: ReadonlyMap<string, Issue>) {
   const path: Issue[] = [];
@@ -77,10 +80,11 @@ function TreeNode({ issue, depth, childrenById, ...actions }: {
   const stage = issueStages.find(({ id }) => id === issue.status)!;
   const title = issueTitle(issue);
   const chatId = issue.threadIds.at(-1);
-  const { chatOpen, chatActive } = useChatHighlight(issue.threadIds);
+  const workStart = linkedWorkStartedAt(issue.threadIds, useCardActivities());
+  const { chatOpen, chatActive, cardActive } = useChatHighlight(issue.threadIds, issue.id);
   return (
     <li className="min-w-0">
-      <div className="kb-tree-node rounded-md p-1 hover:bg-state-hover" data-selected={selection?.has(issue.id)} data-chat-open={chatOpen} data-chat-active={chatActive}
+      <div className="kb-tree-node rounded-md p-1 hover:bg-state-hover" data-selected={selection?.has(issue.id)} data-chat-open={chatOpen} data-chat-active={chatActive} data-card-active={cardActive}
         data-kanban-card-id={issue.id} data-kanban-kind="issue" data-kanban-project={issue.projectId}
         data-kanban-stage={issue.status} data-kanban-title={title}
         onClick={(event) => { if (isCardBackgroundClick(event)) openTask(issue); }}
@@ -101,6 +105,7 @@ function TreeNode({ issue, depth, childrenById, ...actions }: {
         <div className="min-w-0 flex-1">
           <button type="button" className="kb-card-title text-left font-medium"
             title={title} onClick={() => openTask(issue)}>{title}</button>
+          <CardWorkTime stage={issue.status} startedAt={workStart} />
           <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1"><span className={`size-1.5 rounded-full ${stage.dot}`} />{stage.label}</span>
             {children.length > 0 && <span>Подзадач · {children.length}</span>}

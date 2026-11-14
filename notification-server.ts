@@ -2,8 +2,9 @@ import type { BbPluginApi } from '@get-bb/plugin-sdk';
 import { randomUUID } from 'node:crypto';
 import { channel, contract, testNotificationChannel } from './notification-contract';
 import { notificationStore } from './notification-store';
-import { soundDelivery } from './sound-delivery';
+import { SOUND_MAX_AGE, soundDelivery } from './sound-delivery';
 import { migrateStatusBar } from './notification-migration';
+import { notificationTargets } from './notification-targets';
 
 type Thread = Awaited<ReturnType<BbPluginApi['sdk']['threads']['list']>>[number];
 type Interaction = Awaited<ReturnType<BbPluginApi['sdk']['threads']['interactions']['list']>>[number];
@@ -32,6 +33,7 @@ export function registerNotifications(bb: BbPluginApi) {
   const pending = new Map<string, Promise<void>>();
   const retries = new Map<string, ReturnType<typeof setTimeout>>();
   const deleted = new Set<string>();
+  const internal = (thread: Pick<Thread, 'originPluginId' | 'visibility'>) => thread.originPluginId === bb.pluginId && thread.visibility === 'hidden';
   async function readThread(threadId: string) {
     await ready();
     const thread = await bb.sdk.threads.markRead({ threadId });
@@ -39,8 +41,8 @@ export function registerNotifications(bb: BbPluginApi) {
     if (thread.lastReadAt !== null && store.readThread(thread.id, thread.lastReadAt)) changed();
     return { ok: true };
   }
-  const question = (thread: Parameters<typeof titleOf>[0] & { lastReadAt: number | null }, interaction: Interaction, live = false) => {
-    if (stopped || deleted.has(thread.id) || interaction.status !== 'pending' || interaction.payload.kind === 'approval') return;
+  const question = (thread: Pick<Thread, 'id' | 'title' | 'titleFallback' | 'lastReadAt' | 'originPluginId' | 'visibility'>, interaction: Interaction, live = false) => {
+    if (stopped || internal(thread) || deleted.has(thread.id) || interaction.status !== 'pending' || interaction.payload.kind === 'approval') return;
     const detail = interaction.payload.kind === 'user_question'
       ? interaction.payload.questions.map(question => question.prompt).join('\n')
       : 'title' in interaction.payload ? interaction.payload.title : 'Агент ожидает вашего ответа';
@@ -87,7 +89,7 @@ export function registerNotifications(bb: BbPluginApi) {
         kind: 'completed', detail: 'Агент завершил работу. Откройте чат, чтобы прочитать результат.',
         createdAt: candidate.createdAt, readAt: (current.lastReadAt ?? 0) >= candidate.createdAt ? current.lastReadAt : null })) {
         changed();
-        if (live && candidate.createdAt >= startedAt && (current.lastReadAt ?? 0) < candidate.createdAt)
+        if (live && !internal(current) && candidate.createdAt >= startedAt && (current.lastReadAt ?? 0) < candidate.createdAt)
           sound.publish(`completed:${threadId}:${candidate.id}`, 'completed', threadId);
       }
     }
@@ -111,7 +113,7 @@ export function registerNotifications(bb: BbPluginApi) {
   bb.events.on('thread.failed', async ({ thread }) => {
     await ready();
     if (store.resetLegacy(thread.id)) changed();
-    if (thread.updatedAt >= startedAt && (thread.lastReadAt ?? 0) < thread.updatedAt)
+    if (!internal(thread) && thread.updatedAt >= startedAt && (thread.lastReadAt ?? 0) < thread.updatedAt)
       sound.publish(`error:${thread.id}:${thread.updatedAt}`, 'error', thread.id);
   });
   bb.events.on('interaction.pending', async ({ thread, interaction }) => { await ready(); question(thread, interaction, true); });
@@ -142,7 +144,16 @@ export function registerNotifications(bb: BbPluginApi) {
     'notifications.sound.presence': async ({ clientId, systemChannel }) => { await ready(); return sound.presence(clientId, systemChannel); },
     'notifications.sound.claim': async ({ id }) => { await ready(); return sound.claim(id); },
     'notifications.sound.contribute': async ({ id }) => { await ready(); sound.publish(id, 'derivation'); return { ok: true }; },
-    'notifications.list': async () => { await ready(); return store.list(); },
+    'notifications.list': async () => {
+      await ready();
+      const targets = await notificationTargets(bb, store.unreadThreadIds());
+      const result = store.list(targets.project);
+      for (const notice of result.notices) {
+        if (notice.derivationId && notice.createdAt >= startedAt && Date.now() - notice.createdAt < SOUND_MAX_AGE)
+          sound.publish(notice.id, 'completed');
+      }
+      return { ...result, hiddenLegacyThreads: [...new Set([...result.hiddenLegacyThreads, ...targets.hiddenThreads])] };
+    },
     'notifications.viewThread': ({ threadId }) => readThread(threadId),
     'notifications.dismissAll': async ({ legacyThreadIds }) => {
       await ready();
@@ -168,7 +179,12 @@ export function registerNotifications(bb: BbPluginApi) {
       await ready();
       const notice = store.get(id);
       if (!notice) return { ok: false };
-      return readThread(notice.threadId);
+      const target = (await notificationTargets(bb, [notice.threadId])).project(notice);
+      if (!target) return { ok: false };
+      if (!target.derivationId) return readThread(target.threadId);
+      if (!target.issueId) await readThread(target.threadId);
+      if (store.read(id, Date.now())) changed();
+      return { ok: true };
     },
   });
   bb.background.service('notification-recovery', { async start(signal) {

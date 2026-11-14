@@ -9,6 +9,7 @@ import { useViewedNotifications } from './viewed-notifications';
 import { NotificationPopups, usePopupArrivals } from './notification-popups';
 import { NotificationSoundControls, useNotificationSound } from './use-notification-sound';
 import { testNotificationChannel } from './notification-contract';
+import { useActivityRuns } from './derive-activity';
 import { statusThreads, chatStatusText } from './status-model';
 import { mountStatusShell, type FooterItem, type FooterSnapshot } from './status-shell';
 import './status-bar.css';
@@ -34,10 +35,14 @@ export function GlobalStatusBar() {
   const navigate = useBbNavigate();
   const scope = usePortalScopeProps();
   const notices = useNotifications();
+  const runs = useActivityRuns();
+  // The originating window already has the detailed generation entry. Other clients use the saved result.
+  const visibleNotices = useMemo(() => notices.notices.filter(notice => !notice.derivationId ||
+    !runs.some(run => run.jobId === notice.derivationId)), [notices.notices, runs]);
   useViewedNotifications(split?.panes.find(pane => pane.isFocused)?.threadId ?? context.threadId,
-    notices.notices, notices.viewThread);
+    notices.notices, notices.viewThread, notices.read);
   const sound = useNotificationSound();
-  const popups = usePopupArrivals(notices.notices);
+  const popups = usePopupArrivals(visibleNotices);
   useRealtime(testNotificationChannel, payload => {
     window.dispatchEvent(new CustomEvent('bb:status-popup', { detail: payload }));
   });
@@ -127,6 +132,11 @@ export function GlobalStatusBar() {
     setActiveChat(id);
   };
   const openChat = (selected: PluginSidebarThread) => openChatId(selected.id, selected.displayTitle);
+  const openIssueId = (issueId: string) => {
+    setOpen(null);
+    const request = new CustomEvent('bb:focus-status-issue', { detail: { issueId }, cancelable: true });
+    if (window.dispatchEvent(request)) navigate.toPluginPanel('board', { subPath: `issue/${issueId}` });
+  };
   const usageItem = footer.items.find(item => item.id.includes('bb--provider-usage-usage'));
   const serviceItems = footer.items.filter(item => item !== usageItem && item.id !== 'sidebar-footer-more');
   const more = footer.items.find(item => item.id === 'sidebar-footer-more');
@@ -141,7 +151,7 @@ export function GlobalStatusBar() {
     }
     previousErrors.current = new Set(errors.map(error => error.id));
   }, [legacy, data.status, popups.notify]);
-  const notifications = contributions + notices.unread + legacy.length;
+  const notifications = contributions + notices.unread - (notices.notices.length - visibleNotices.length) + legacy.length;
   const clearNotifications = async () => {
     if (clearing) return;
     setClearing(true);
@@ -187,7 +197,8 @@ export function GlobalStatusBar() {
   if (!target) return null;
   return createPortal(<>
     <div {...scope}><NotificationPopups items={popups.queue} dismiss={popups.dismiss} open={item => {
-      if (item.threadId) openChatId(item.threadId, item.title);
+      if (item.issueId) openIssueId(item.issueId);
+      else if (item.threadId) openChatId(item.threadId, item.title);
       else setOpen('notifications');
       if (item.noticeId) void notices.read(item.noticeId);
     }} /></div>
@@ -203,12 +214,12 @@ export function GlobalStatusBar() {
         if (buttons[next]) { event.preventDefault(); buttons[next].focus(); }
       }}>
       <div className="kb-status-left">
-        {popup('project', project?.name ?? 'Проект не выбран', <><StatusIcon kind="project" /><span className="kb-status-project-label">{project?.name ?? 'BB'}</span>
+        {popup('project', project?.name ?? 'Раздел не выбран', <><StatusIcon kind="project" /><span className="kb-status-project-label">{project?.name ?? 'BB'}</span>
           {thread?.environment?.branchName && <span className="kb-status-branch">⑂ {thread.environment.branchName}</span>}</>, <>
-          <p>{project?.name ?? 'Выберите проект или чат'}</p>
+          <p>{project?.name ?? 'Выберите раздел или чат'}</p>
           {thread?.environment?.name && <p>Окружение: {thread.environment.name}</p>}
           {thread?.environment?.branchName && <p>Ветка: {thread.environment.branchName}</p>}
-          {project && <button className="kb-status-service-row" onClick={() => { setOpen(null); navigate.toProject(project.id); }}>Открыть проект</button>}
+          {project && <button className="kb-status-service-row" onClick={() => { setOpen(null); navigate.toProject(project.id); }}>Открыть раздел</button>}
         </>, 'kb-status-project')}
         {popup('working', `Работающие чаты: ${data.status === 'ready' ? threads.working.length : 'данные недоступны'}`,
           <><StatusIcon kind="working" /><span className="kb-status-caption">Работают</span><span className="kb-status-count">{data.status === 'ready' ? threads.working.length : '—'}</span></>,
@@ -234,7 +245,11 @@ export function GlobalStatusBar() {
           <NotificationSoundControls sound={sound} />
           <div data-bb-status-notification-contributions="" />
           {notices.error && <p role="alert">{notices.error}</p>}
-          <NotificationList notices={notices.notices} open={notice => { openChatId(notice.threadId, notice.title); void notices.read(notice.id); }} dismiss={id => void notices.dismiss(id)} />
+          <NotificationList notices={visibleNotices} open={notice => {
+            if (notice.issueId) openIssueId(notice.issueId);
+            else openChatId(notice.threadId, notice.title);
+            void notices.read(notice.id);
+          }} dismiss={id => void notices.dismiss(id)} />
           {list(legacy, '', id => void notices.dismissLegacy(id))}
           {!notices.notices.length && !contributions && !legacy.length && <p className="kb-status-empty">Новых уведомлений нет. Здесь появятся результаты работы агентов и запросы ответа.</p>}
         </>, 'kb-status-notifications')}

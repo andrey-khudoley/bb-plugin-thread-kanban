@@ -9,23 +9,31 @@ import { reviewToolName } from "./review-agent";
 import { registerProjects } from "./project-server";
 import { registerSettings } from "./settings-server";
 import { registerNotifications } from './notification-server';
+import { registerCardActivity } from './card-activity-server';
+import { registerCardChatPreview } from './card-chat-preview-server';
+import { registerTagColors } from './tag-colors-server';
+import { registerProjectFolders } from './project-folders-server';
 
 export default function threadKanban(bb: BbPluginApi) {
   registerSettings(bb);
   registerNotifications(bb);
+  registerCardActivity(bb);
+  registerCardChatPreview(bb);
+  registerTagColors(bb);
   const workDiffs = registerWorkDiffs(bb);
-  const issues = registerIssues(bb, workDiffs, (ids) => merges.inspectEnvironments(ids, false));
+  const folders = registerProjectFolders(bb);
+  const issues = registerIssues(bb, workDiffs, (ids) => merges.inspectEnvironments(ids, false), folders);
   registerProjects(bb, issues);
   const merges = registerMerges(bb, workDiffs);
   registerChatArchive(bb);
-  const readTools = registerAgentAccess(bb, issues);
-  bb.agents.configure(({ origin, pluginMetadata }) => ({
-    tools: [...readTools, ...(origin.pluginId === bb.pluginId && pluginMetadata.sharedReview === true ? [reviewToolName] : [])],
+  const readTools = registerAgentAccess(bb, issues, folders);
+  bb.agents.configure(({ origin, pluginMetadata, thread }) => ({
+    tools: [...readTools, folders.searchTool, ...(origin.pluginId === bb.pluginId && pluginMetadata.sharedReview === true ? [reviewToolName] : [])],
     skills: ["thread-kanban"],
     instructions: "Проверяй канбан через kanban_snapshot, kanban_card_get и kanban_diagnostics. " +
       "Для проверки отображения используй kanban_ui_snapshot; серверные данные не доказывают видимость. " +
       "Для скриншота открой вкладку через kanban_ui_open, затем kanban_ui_capture и закрой kanban_ui_close. " +
-      "Вкладка наблюдения показывает настоящее приложение BB с отдельными настройками отображения; не выдавай её за окно пользователя.",
+      "Вкладка наблюдения показывает настоящее приложение BB с отдельными настройками отображения; не выдавай её за окно пользователя.\n" + folders.instructionsForThread(thread.id),
   }));
   bb.rpc.register(planRpc, {
     async planList({ keys }) {

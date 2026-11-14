@@ -12,7 +12,7 @@ Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>visi
 const { render, act, waitFor, cleanup } = await import('@testing-library/react');
 await build({entryPoints:['viewed-notifications.ts'],outfile:'dist/viewed-notifications-test.mjs',bundle:true,packages:'external',platform:'node',format:'esm'});
 const { useViewedNotifications } = await import('./dist/viewed-notifications-test.mjs');
-function Fixture({ threadId=null, notices, view }) { useViewedNotifications(threadId,notices,view); return null; }
+function Fixture({ threadId=null, notices, view, read }) { useViewedNotifications(threadId,notices,view,read); return null; }
 const notice=(id,threadId)=>({id,threadId,kind:'completed',title:id,detail:'',createdAt:1,readAt:null});
 
 test('native navigation and newly arriving notices acknowledge only the visible chat, without a bell click', async t=>{
@@ -38,4 +38,16 @@ test('Kanban view events acknowledge its chat; background windows and hidden pag
  assert.deepEqual(calls,['b']);
  visibility='visible';await act(async()=>document.dispatchEvent(new Event('visibilitychange')));
  await waitFor(()=>assert.deepEqual(calls,['b','a']));
+});
+
+test('viewing a generated card acknowledges its result without reading the worker transcript', async t => {
+ t.after(cleanup); focused=true;visibility='visible';const calls=[],reads=[];
+ const view=async id=>calls.push(id),read=async id=>reads.push(id);
+ const notices=[{...notice('result','worker'),issueId:'child',derivationId:'job'},notice('ordinary','other')];
+ const slot=render(createElement(Fixture,{threadId:'worker',notices,view,read}));
+ assert.deepEqual(calls,[]);assert.deepEqual(reads,[]);
+ await act(async()=>window.dispatchEvent(new CustomEvent('bb:notification-view',{detail:{source:'kanban',threadIds:[],issueIds:['child']}})));
+ await waitFor(()=>assert.deepEqual(reads,['result']));assert.deepEqual(calls,[]);
+ slot.rerender(createElement(Fixture,{threadId:'worker',notices:[...notices],view,read}));
+ assert.deepEqual(reads,['result']);
 });

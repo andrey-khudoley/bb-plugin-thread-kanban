@@ -107,7 +107,7 @@ test('clear all hides all derivations through the contribution bridge while keep
  assert.equal(store.getSnapshot().find(run=>run.key===first.key).jobId,'d4f67d49-4234-4b70-97fe-74aa38b043cf');
 });
 
-test('the bell bridge opens chats and generated cards on the visible board, then native chats outside it', async t => {
+test('the bell bridge opens chats and generated cards on the visible board, then the card route outside it', async t => {
  const root=document.createElement('main'), target=document.createElement('div');
  target.dataset.bbStatusNotificationContributions='';document.body.append(root,target);
  root.getClientRects=()=>[{}];root.getBoundingClientRect=()=>({top:0,left:0,right:700,bottom:500,width:700,height:500});
@@ -124,9 +124,11 @@ test('the bell bridge opens chats and generated cards on the visible board, then
  await act(async()=>target.querySelector('article button.text-left').click());
  assert.equal(sectionStore.get(opened[1].params.sectionId).context.issueId,'new-card');
  assert.equal(slot.inspection.navigateCalls.length,0);
+ const resultEvent=new CustomEvent('bb:focus-status-issue',{detail:{issueId:'server-card'},cancelable:true});
+ await act(async()=>assert.equal(window.dispatchEvent(resultEvent),false));
+ assert.equal(sectionStore.get(opened[2].params.sectionId).context.issueId,'server-card');
  root.hidden=true;
  assert.equal(window.dispatchEvent(new CustomEvent('bb:focus-status-chat',{detail:{threadId:'question'},cancelable:true})),true);
  await act(async()=>target.querySelector('article button.text-left').click());
- assert.equal(slot.inspection.navigateCalls.at(-1).method,'toThread');
- assert.equal(slot.inspection.navigateCalls.at(-1).threadId,'new-chat');
+ assert.deepEqual(slot.inspection.navigateCalls.at(-1),{method:'toPluginPanel',path:'board',options:{subPath:'issue/new-card'}});
 });

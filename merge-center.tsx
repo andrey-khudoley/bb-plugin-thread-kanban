@@ -107,7 +107,7 @@ function NextStep({ plan, sending, send, check, openThread }: {
     }
   } else if (plan.state === "done") {
     heading = "Слияние завершено";
-    description = "Результаты по проектам показаны ниже.";
+    description = "Результаты по разделам показаны ниже.";
   } else {
     heading = "Пока нечего сливать";
     description = plan.message;
@@ -145,7 +145,7 @@ export function MergeCenter({ id, initialProjectId }: { id?: string; initialProj
   const plan = current.data?.id === id ? current.data : undefined;
   const skipped = plan?.skipped.filter(({ title, message }) => !plan.preparations.some((item) =>
     (item.kind === "worktree" && item.title === title && message === "Есть незакоммиченные изменения в worktree.") ||
-    (item.kind === "main" && plan.state === "blocked" && message === "Сначала подготовь основную рабочую папку проекта."))) ?? [];
+    (item.kind === "main" && plan.state === "blocked" && message === "Сначала подготовь основную рабочую папку раздела."))) ?? [];
   const pending = busy(plan?.state) || !!plan?.explaining;
   const trackCurrent = !!plan && (pending || tracksCheckout(plan));
   const listPending = !!list.data?.some((job) => job.id !== id && busy(job.state));
@@ -225,9 +225,9 @@ export function MergeCenter({ id, initialProjectId }: { id?: string; initialProj
           <h1 className="font-semibold">Слияния</h1>
         </div>
         <div className="kb-merge-actions" role="group" aria-label="Подготовить слияние готовых задач">
-          <select aria-label="Проект для слияния" className="rounded-md border border-input bg-background px-2 text-xs"
+          <select aria-label="Раздел для слияния" className="rounded-md border border-input bg-background px-2 text-xs"
             value={projectId} onChange={(event) => setProjectId(event.target.value)}>
-            <option value="">Все проекты</option>
+            <option value="">Все разделы</option>
             {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
           </select>
           <Button variant="outline" size="sm" disabled={starting} onClick={() => void planReadyBranches()}>
@@ -279,7 +279,7 @@ export function MergeCenter({ id, initialProjectId }: { id?: string; initialProj
                   <section key={item.id} className="space-y-2 rounded-lg border border-border p-2.5">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium">{item.kind === "worktree" ? "Ветка задачи" : "Основная папка проекта"}</p>
+                        <p className="text-sm font-medium">{item.kind === "worktree" ? "Ветка задачи" : "Основная папка раздела"}</p>
                         <p className="break-all text-xs text-muted-foreground">{item.branch} · файлов {item.count}</p>
                       </div>
                       {item.commitAvailable && plan.state === "ready" && !item.waitingFor?.length &&

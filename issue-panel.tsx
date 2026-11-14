@@ -29,6 +29,8 @@ import { usePanelSection } from "./panel-section-ui";
 import { sectionStore } from "./panel-context";
 import { usePanelState } from "./panel-view-state";
 import { PanelHeading } from "./panel-heading";
+import { TagColorEditor } from './tag-colors-ui';
+import { FolderAssignment, useProjectFolders } from './project-folders-ui';
 
 export const issueTab = {
   id: "issue",
@@ -149,6 +151,7 @@ function IssueEditor({ issue: loadedIssue, issues, refresh, requestId, initialTh
   restoredView: IssueView | null;
 }) {
   const panel = experimental_useAppPanel();
+  const folders = useProjectFolders();
   const navigate = useBbNavigate();
   const rpc = useRpc<typeof issueRpc>();
   const providers = experimental_useProviders().providers;
@@ -363,6 +366,7 @@ function IssueEditor({ issue: loadedIssue, issues, refresh, requestId, initialTh
       <div data-kanban-scroll="issue-content" hidden={!!threadId && !!workspaceView} className="min-h-0 flex-1 overflow-auto">
         <div className="kb-detail-content space-y-4">
         <fieldset hidden={view !== "overview"} aria-label="Поля задачи" disabled={request} className="min-w-0 space-y-3">
+          <FolderAssignment issue={issue} folders={folders.data ?? []} changed={() => void refresh()} />
           {textFields.map((field) => {
             const { key, label, rows, maxLength } = field;
             const edit = textEdit?.key === key ? textEdit : null;
@@ -442,6 +446,7 @@ function IssueEditor({ issue: loadedIssue, issues, refresh, requestId, initialTh
               <Input value={tags ?? fields.tags.join(", ")}
                 onChange={(event) => formDraft.update((current) => ({ ...current, tags: event.target.value }))} />
             </label>
+            <TagColorEditor tags={(tags ?? fields.tags.join(',')).split(',')} />
           </div>
         </fieldset>
 
@@ -510,7 +515,7 @@ function IssueEditor({ issue: loadedIssue, issues, refresh, requestId, initialTh
           ))}
           <Button size="sm" variant="outline" disabled={request} onClick={() => void run(async () => {
             await saveDraft();
-            const child = await rpc.call("issueCreate", { projectId: issue.projectId, status: "backlog", parentId: issue.id });
+            const child = await rpc.call("issueCreate", { projectId: issue.projectId, status: "backlog", parentId: issue.id, test: false });
             openIssue(panel, child, { startWithAssistant: true });
           })}>+ Подзадача</Button>
         </fieldset>
@@ -559,8 +564,8 @@ function IssueEditor({ issue: loadedIssue, issues, refresh, requestId, initialTh
             {personal ? (
               <p className="text-xs text-muted-foreground">
                 {sourceThreadId || issue.origin?.threadId
-                  ? "Рабочая папка исходного чата. Отдельный Git worktree доступен в Git-проектах."
-                  : "Личная рабочая папка. Отдельный Git worktree доступен в Git-проектах."}
+                  ? "Рабочая папка исходного чата. Отдельный Git worktree доступен в Git-разделах."
+                  : "Личная рабочая папка. Отдельный Git worktree доступен в Git-разделах."}
               </p>
             ) : <label className="flex items-center gap-1.5 text-xs">
               <input type="checkbox" checked={worktree} onChange={(event) => setWorktree(event.target.checked)} /> Отдельный Git worktree

@@ -25,7 +25,7 @@ export function registerProjects(bb: BbPluginApi, issues: {
     return operation;
   }
   async function removalPlan(projectId: string) {
-    if (projectId === personalProjectId) throw new Error("Personal — системный проект, его нельзя убрать.");
+    if (projectId === personalProjectId) throw new Error("Personal — системный раздел, его нельзя убрать.");
     const project = await bb.sdk.projects.get({ projectId });
     // A visible empty board is not evidence that archived/hidden chats are absent.
     const pages = await Promise.all([false, true].map((archived) => bb.sdk.threads.list({
@@ -45,7 +45,7 @@ export function registerProjects(bb: BbPluginApi, issues: {
     projectRemove({ projectId, confirmation }) {
       return serialize(async () => {
         const plan = await removalPlan(projectId);
-        if (confirmation !== plan.confirmation) throw new Error("Состав или название проекта изменились. Проверь условия ещё раз.");
+        if (confirmation !== plan.confirmation) throw new Error("Состав или название раздела изменились. Проверь условия ещё раз.");
         if (plan.mode === "personal") {
           await bb.storage.kv.set(personalGroupsKey, [...new Set([...await readGroups(), projectId])]);
         } else {
@@ -53,7 +53,7 @@ export function registerProjects(bb: BbPluginApi, issues: {
           try {
             // Recheck immediately before the native destructive call, after acquiring the task lock.
             const current = await removalPlan(projectId);
-            if (current.confirmation !== confirmation) throw new Error("Состав проекта изменился. Проверь условия ещё раз.");
+            if (current.confirmation !== confirmation) throw new Error("Состав раздела изменился. Проверь условия ещё раз.");
             await bb.sdk.projects.delete({ projectId });
             prepared.commit();
           } finally {
@@ -76,11 +76,11 @@ export function registerProjects(bb: BbPluginApi, issues: {
       // Serialize read/modify/write so different open boards do not lose moves.
       return serialize(async () => {
         const projects = await bb.sdk.projects.list({ includePersonal: true });
-        if (!projects.some(({ id }) => id === input.projectId)) throw new Error("Проект не найден.");
+        if (!projects.some(({ id }) => id === input.projectId)) throw new Error("Раздел не найден.");
         const baseline = orderProjects(projects, input.baseline);
         const ordered = orderProjects(baseline, await readOrder()).map(({ id }) => id);
         const hidden = new Set(await readGroups());
-        if (hidden.has(input.projectId)) throw new Error("Проект показан в Personal. Сначала верни его в канбан.");
+        if (hidden.has(input.projectId)) throw new Error("Раздел показан в Personal. Сначала верни его в канбан.");
         const visible = moveProject(ordered.filter((id) => !hidden.has(id)), input.projectId, input.direction);
         let position = 0;
         const next = ordered.map((id) => hidden.has(id) ? id : visible[position++]);
@@ -90,7 +90,7 @@ export function registerProjects(bb: BbPluginApi, issues: {
       });
     },
     async projectRename({ projectId, name }) {
-      if (projectId === personalProjectId) throw new Error("Personal — системный проект, его нельзя переименовать.");
+      if (projectId === personalProjectId) throw new Error("Personal — системный раздел, его нельзя переименовать.");
       await bb.sdk.projects.update({ projectId, name });
       bb.realtime.publish(projectsChanged, null);
       return null;

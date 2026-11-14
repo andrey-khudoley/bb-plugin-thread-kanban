@@ -3,7 +3,7 @@ import { z } from "zod";
 
 const id = z.string().min(1);
 export const projectsChanged = "projects-changed";
-export const projectName = z.string().trim().min(1, "Введи название проекта.");
+export const projectName = z.string().trim().min(1, "Введи название раздела.");
 const projectRemoval = z.object({
   mode: z.enum(["personal", "delete"]), name: z.string(), tasks: z.number().int().nonnegative(), confirmation: id,
 });

@@ -49,25 +49,25 @@ export function ProjectDialog({ target, close, changed, restoreProjects = [] }: 
     <DialogContent className="kb-dialog" onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }}>
       <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <DialogHeader>
-          <DialogTitle>{restoring ? "Вернуть проект в канбан" : removing
-            ? !plan ? "Проверяю проект…" : plan.mode === "personal" ? "Убрать проект в Personal?" : "Удалить проект?"
-            : "Переименовать проект"}</DialogTitle>
+          <DialogTitle>{restoring ? "Вернуть раздел в канбан" : removing
+            ? !plan ? "Проверяю раздел…" : plan.mode === "personal" ? "Убрать раздел в Personal?" : "Удалить раздел?"
+            : "Переименовать раздел"}</DialogTitle>
           <DialogDescription className="break-words">
-            {restoring ? "Выбери проект, чтобы снова показать его задачи и чаты отдельной группой."
-              : removing ? !plan ? `Проверяю задачи и все чаты проекта «${target.name}», включая архивные и скрытые.`
+            {restoring ? "Выбери раздел, чтобы снова показать его задачи и чаты отдельной группой."
+              : removing ? !plan ? `Проверяю задачи и все чаты раздела «${target.name}», включая архивные и скрытые.`
                 : plan.mode === "personal"
-                  ? `В канбане задачи и чаты проекта «${plan.name}» будут показаны в Personal. Сам проект и принадлежность чатов в BB сохранятся. Вернуть группу можно через меню Personal.`
-                  : `В проекте «${plan.name}» нет чатов, включая архивные и скрытые. Проект будет удалён из BB. Его задачи (${plan.tasks}) сохранятся в Personal.`
-                : `Новое название проекта «${target.name}» появится во всём приложении.`}
+                  ? `В канбане задачи и чаты раздела «${plan.name}» будут показаны в Personal. Сам раздел и принадлежность чатов в BB сохранятся. Вернуть группу можно через меню Personal.`
+                  : `В разделе «${plan.name}» нет чатов, включая архивные и скрытые. Раздел будет удалён из BB. Его задачи (${plan.tasks}) сохранятся в Personal.`
+                : `Новое название раздела «${target.name}» появится во всём приложении.`}
           </DialogDescription>
         </DialogHeader>
         {target.kind === "rename" && <div className="my-4 space-y-1">
-          <label htmlFor="kb-project-name" className="text-sm">Название проекта</label>
+          <label htmlFor="kb-project-name" className="text-sm">Название раздела</label>
           <Input id="kb-project-name" autoFocus value={name} disabled={pending}
             onFocus={(event) => event.target.select()} onChange={(event) => setName(event.target.value)} />
-          {!name.trim() && <p className="text-sm text-destructive">Введи название проекта.</p>}
+          {!name.trim() && <p className="text-sm text-destructive">Введи название раздела.</p>}
         </div>}
-        {restoring && <select aria-label="Проект для возврата" value={restoreId} disabled={pending}
+        {restoring && <select aria-label="Раздел для возврата" value={restoreId} disabled={pending}
           className="my-4 h-9 w-full rounded-md border border-input bg-background px-2 text-sm" onChange={(event) => setRestoreId(event.target.value)}>
           {restoreProjects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
         </select>}
@@ -75,8 +75,8 @@ export function ProjectDialog({ target, close, changed, restoreProjects = [] }: 
         <DialogFooter className="mt-4">
           <Button type="button" variant="outline" disabled={pending} onClick={close}>Отмена</Button>
           <Button type="submit" variant={removing && plan?.mode === "delete" ? "destructive" : "default"} disabled={pending || !canSave}>
-            {pending ? "Сохраняю…" : restoring ? "Вернуть проект" : removing
-              ? plan?.mode === "delete" ? "Удалить проект" : "Убрать в Personal" : "Сохранить"}
+            {pending ? "Сохраняю…" : restoring ? "Вернуть раздел" : removing
+              ? plan?.mode === "delete" ? "Удалить раздел" : "Убрать в Personal" : "Сохранить"}
           </Button>
         </DialogFooter>
       </form>

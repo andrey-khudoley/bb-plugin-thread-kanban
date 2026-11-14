@@ -1,14 +1,17 @@
 import { useId, useState, type HTMLAttributes, type ReactNode } from "react";
 import { CardMenu, isCardBackgroundClick, type CardActionGroup } from "./kanban-ui";
+import { CardTagDots } from './tag-colors-ui';
 
 /** The primary button and every secondary control are siblings, never nested. */
 export function TaskListRow({ id, kind, projectId, title, stage, stageLabel, summary, updatedAt,
-  signals, details, groups, selected, chatOpen, chatActive, open, toggle, drag }: {
+  workTime, signals, details, groups, tags = [], selected, chatOpen, chatActive, cardActive, open, toggle, drag, suppressClick }: {
   id: string; kind: "issue" | "thread"; projectId: string; title: string;
   stage: string; stageLabel: string; summary: string; updatedAt: number;
-  signals?: ReactNode; details: ReactNode; groups: readonly CardActionGroup[];
-  selected?: boolean; chatOpen: boolean; chatActive: boolean; open: () => void; toggle: () => void;
-  drag?: Pick<HTMLAttributes<HTMLElement>, "onDragStart" | "onDragOver" | "onDrop">;
+  workTime?: ReactNode; signals?: ReactNode; details: ReactNode; groups: readonly CardActionGroup[];
+  tags?: readonly string[];
+  selected?: boolean; chatOpen: boolean; chatActive: boolean; cardActive: boolean; open: () => void; toggle: () => void;
+  drag?: Pick<HTMLAttributes<HTMLElement>, "draggable" | "onDragStart" | "onDragEnd" | "onDragOver" | "onDragLeave" | "onDrop">;
+  suppressClick?: () => boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
@@ -16,10 +19,11 @@ export function TaskListRow({ id, kind, projectId, title, stage, stageLabel, sum
   const primary = selectionMode ? toggle : open;
   return (
     <article className="kb-card kb-list-row bg-card" data-selected={selected} draggable={!!drag} {...drag}
-      data-chat-open={chatOpen} data-chat-active={chatActive}
+      data-chat-open={chatOpen} data-chat-active={chatActive} data-card-active={cardActive}
       data-kanban-card-id={id} data-kanban-kind={kind} data-kanban-project={projectId} data-kanban-stage={stage}
       onClick={(event) => { if (isCardBackgroundClick(event)) primary(); }}
       onClickCapture={(event) => {
+        if (suppressClick?.()) { event.preventDefault(); event.stopPropagation(); return; }
         if ((event.ctrlKey || event.metaKey) && (isCardBackgroundClick(event) ||
           (event.target instanceof Element && event.target.closest(".kb-list-open")))) {
           event.preventDefault(); event.stopPropagation(); toggle();
@@ -30,7 +34,7 @@ export function TaskListRow({ id, kind, projectId, title, stage, stageLabel, sum
           <input type="checkbox" aria-label={`Выбрать ${kind === "issue" ? "задачу" : "чат"}: ${title}`}
             checked={selected} onChange={toggle} />
         </label>}
-        <button type="button" className="kb-list-open" onClick={primary}
+        <button type="button" className="kb-list-open" onClick={primary} draggable={drag?.draggable ?? !!drag}
           aria-label={selectionMode ? `${selected ? "Снять выбор" : "Выбрать"}: ${title}` : `Открыть: ${title}`}>
           <span className="kb-card-title">{title}</span>
           <span className="kb-list-open-arrow" aria-hidden="true">›</span>
@@ -38,6 +42,7 @@ export function TaskListRow({ id, kind, projectId, title, stage, stageLabel, sum
       </div>
       <div className="kb-list-state">
         <span className="kb-list-status" data-stage={stage}>{stageLabel}</span>
+        {workTime}
         {signals && <div className="kb-list-signals">{signals}</div>}
       </div>
       <div className="kb-list-context">
@@ -54,6 +59,7 @@ export function TaskListRow({ id, kind, projectId, title, stage, stageLabel, sum
         <CardMenu label={`Действия с ${kind === "issue" ? "задачей" : "чатом"}: ${title}`}
           triggerLabel="Действия" groups={groups} />
       </div>
+      <CardTagDots tags={tags} />
       {expanded && <div id={detailsId} className="kb-list-details" data-no-card-open>{details}</div>}
     </article>
   );

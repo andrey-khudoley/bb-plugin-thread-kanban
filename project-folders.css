@@ -1,0 +1,151 @@
+/* A project is a group in the lane. Its cards retain the lane's full content
+   width, typography and surfaces; nesting never introduces a second scroller. */
+.kb-folder {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  max-width: 39rem;
+  color: var(--foreground);
+}
+.kb-folder + :is(.kb-folder, .kb-card), .kb-card + .kb-folder { margin-block-start: 12px; }
+.kb-folder-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 3px 4px;
+  padding: 4px 0 10px;
+}
+.kb-folder-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 2px;
+  border-radius: 5px;
+  text-align: start;
+  cursor: pointer;
+}
+.kb-folder-toggle:hover { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
+.kb-folder .kb-folder-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 19px;
+}
+.kb-folder-chevron {
+  flex: none;
+  width: 12px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  color: var(--muted-foreground);
+}
+.kb-folder[data-expanded="true"] > .kb-folder-heading .kb-folder-chevron { transform: rotate(90deg); }
+.kb-folder-heading > .kb-icon-button { width: 28px; height: 28px; }
+.kb-folder-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  min-width: 0;
+  padding-inline: 20px 4px;
+  color: var(--muted-foreground);
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 11px;
+  line-height: 16px;
+}
+.kb-folder-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.kb-folder-count > span { color: var(--muted-foreground); }
+.kb-folder-state { flex: 1; }
+.kb-folder-state::before { content: '·'; margin-inline-end: 7px; }
+.kb-folder-timer { font-variant-numeric: tabular-nums; font-size: 11px; white-space: nowrap; }
+.kb-folder-meta .kb-folder-timer { display: inline-flex; align-items: center; gap: 4px; font-size: inherit; }
+.kb-folder-timer > svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.25; }
+.kb-folder-cards { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-block-start: 2px; }
+.kb-folder-empty { padding: 14px 12px 16px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.kb-folder-empty p { margin: 0 0 4px; }
+.kb-folder-empty > span { color: var(--muted-foreground); font-size: 11px; }
+.kb-folder-empty-action { display: block; margin-top: 10px; text-decoration: underline; text-underline-offset: 3px; }
+.kb-folder-count:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+.kb-folder :is(.kb-folder-count, .kb-folder-empty-action):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 3px; }
+.kb-folder :is(.kb-folder-toggle, .kb-icon-button):focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.kb-folder[data-drop-target="true"] { outline: 2px solid var(--ring); outline-offset: 2px; }
+.kb-folder[data-drop-target="true"] > .kb-folder-heading { background: var(--accent); }
+.kb-folder-drop-hint {
+  position: absolute; inset: auto 6px 6px; z-index: 1;
+  padding: 7px 8px; border: 1px solid var(--ring); border-radius: 6px;
+  background: var(--popover); color: var(--popover-foreground); text-align: center;
+  font-size: 11px; line-height: 16px; pointer-events: none; overflow-wrap: anywhere;
+}
+.kb-shell[data-kanban-layout="list"] .kb-folder { max-width: none; }
+.kb-shell[data-kanban-layout="list"] .kb-folder-cards > .kb-list-row { border-radius: 8px; }
+@media (pointer: coarse) {
+  .kb-folder-toggle, .kb-folder-heading > .kb-icon-button { min-height: 44px; }
+  .kb-folder-heading > .kb-icon-button { width: 44px; }
+  .kb-folder-toggle { align-items: center; }
+}
+@media (forced-colors: active) {
+  .kb-folder-heading { border: 1px solid CanvasText; border-inline-start-width: 3px; }
+  .kb-folder[data-drop-target="true"] { outline-color: Highlight; }
+}
+/* Transient feedback does not change resting card geometry. */
+.kb-drop-zone, .kb-column-toggle, .kb-card[data-drop-state] { position: relative; }
+:is(.kb-folder,.kb-drop-zone,.kb-card,.kb-column-toggle)[data-drop-state="allowed"] { outline: 2px solid var(--ring); outline-offset: -1px; }
+:is(.kb-folder,.kb-drop-zone,.kb-card,.kb-column-toggle)[data-drop-state="forbidden"] { outline: 2px dashed var(--destructive); outline-offset: -1px; }
+.kb-card[data-drop-state="allowed"]::before { content: ''; position: absolute; inset: -4px 0 auto; height: 3px; border-radius: 2px; background: var(--ring); }
+.kb-drop-label { position: absolute; z-index: 20; inset: auto 4px 4px; padding: 6px 8px; border: 1px solid var(--ring); border-radius: 6px; background: var(--popover); color: var(--popover-foreground); font-size: 11px; line-height: 16px; white-space: normal; overflow-wrap: anywhere; pointer-events: none; }
+[data-drop-state="forbidden"] > :is(.kb-drop-label,.kb-folder-drop-hint) { border-color: var(--destructive); }
+.kb-ungroup-drop:not([data-card-dragging]) { display: none; }
+/* Revealing a drop target must not move the native drag source out from under
+   the pointer. Use the lane/section footer as an overlay in both layouts. */
+.kb-project-grid { position: relative; }
+.kb-ungroup-drop { position: absolute; inset: auto 6px 6px; z-index: 30; min-height: 40px; border: 1px dashed var(--border); border-radius: 6px; display: grid; place-items: center; background: var(--popover); color: var(--muted-foreground); font-size: 11px; }
+.kb-project-members { display: grid; gap: 10px; min-width: 0; }
+.kb-project-undo { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; flex: none; border-top: 1px solid var(--border); padding-top: 8px; font-size: 12px; }
+.kb-members-selection { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+.kb-members-list { list-style: none; padding: 0; margin: 0; }
+.kb-member-row { display: grid; grid-template-columns: 20px minmax(0,1fr) 28px; align-items: start; gap: 8px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
+.kb-member-row > input { width: 16px; height: 16px; margin-top: 5px; accent-color: var(--primary); }
+.kb-member-content { display: grid; gap: 5px; min-width: 0; }
+.kb-member-title { text-align: start; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.kb-member-title:hover { text-decoration: underline; }
+.kb-member-stage { min-width: 0; width: fit-content; max-width: 100%; padding: 3px 5px; border: 1px solid var(--input); border-radius: 5px; background: var(--background); font-size: 11px; }
+.kb-member-context,.kb-members-empty { font-size: 12px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.kb-members-empty { padding-block: 12px; }
+.kb-project-settings { border-top: 1px solid var(--border); padding-block: 10px; font-size: 12px; }
+.kb-project-settings > summary { cursor: pointer; padding-block: 6px; }
+.kb-project-settings > form { flex-wrap: wrap; margin-block: 8px 14px; }
+.kb-project-settings > form input { flex: 1; min-width: 160px; }
+.kb-project-members :is(button,input,select):focus-visible,.kb-project-settings summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (pointer: coarse) {
+  .kb-member-row { grid-template-columns: 32px minmax(0,1fr) 44px; }
+  .kb-member-title,.kb-member-stage { min-height: 44px; }
+  .kb-member-row > .kb-icon-button { width: 44px; height: 44px; }
+  .kb-member-row > input { margin: 12px 8px; }
+}
+.kb-folder-dialog{width:min(720px,calc(100vw - 24px));max-height:90dvh;display:flex;flex-direction:column;overflow:hidden}
+.kb-folder-tabs{display:flex;flex-wrap:wrap;gap:4px}
+.kb-folder-dialog-scroll{overflow:auto;min-height:0;min-width:0;padding:2px;flex:1}
+.kb-folder-message{padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;overflow-wrap:anywhere}
+.kb-folder-message p{white-space:pre-wrap;margin-top:5px}
+.kb-folder-material,.kb-folder-member{display:flex;flex-direction:column;gap:5px;border-bottom:1px solid var(--border);padding:8px 0;font-size:12px;overflow-wrap:anywhere}
+.kb-folder-material button{text-align:left;text-decoration:underline;font-weight:600}
+.kb-folder-upload{font-size:12px;display:flex;flex-direction:column;gap:4px;max-width:100%}
+.kb-folder-upload input{max-width:100%}
+@media(max-width:600px){.kb-folder-dialog{width:100%;max-height:88dvh}.kb-folder-tabs button{flex:1;padding-inline:7px}.kb-folder-member label{max-width:100%}}
+@media(max-width:600px){html[data-kanban-status-shell] .kb-folder-dialog{padding-bottom:calc(42px + env(safe-area-inset-bottom))}}

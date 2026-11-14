@@ -145,6 +145,22 @@ test('bell close hides a record and updates the count without navigating or mark
  assert.equal(document.querySelectorAll('[data-notification-id="dismiss-test"]').length,0);
 });
 
+test('a generated-task bell entry opens its card route instead of the hidden worker chat', async t => {
+ const id='19a1433b-e3f4-4730-8f6b-a555805d7ce4';
+ const slot=renderSlot({component:GlobalStatusBar},{},{rpc:{
+  'notifications.list':()=>({notices:[{id:'result',threadId:'worker',issueId:id,derivationId:'job',label:'Задача создана',
+   title:'Test · Созданная задача',kind:'completed',detail:'Откройте карточку',createdAt:1,readAt:null}],unread:1,coveredThreads:['worker'],hiddenLegacyThreads:['worker']}),
+ }});
+ t.after(()=>{slot.lifecycle.unmount();cleanup();});
+ const user=userEvent.setup({document});
+ await waitFor(()=>assert.ok(screen.getByRole('button',{name:'Уведомления: 1'})));
+ await user.click(screen.getByRole('button',{name:'Уведомления: 1'}));
+ await user.click(document.querySelector('[data-notification-id="result"]'));
+ assert.deepEqual(slot.inspection.navigateCalls.at(-1),{method:'toPluginPanel',path:'board',options:{subPath:`issue/${id}`}});
+ assert.equal(slot.inspection.navigateCalls.some(call=>call.method==='toThread'),false);
+ assert.ok(slot.inspection.rpcCalls.some(call=>call.method==='notifications.read'&&call.input.id==='result'));
+});
+
 test('clear all empties the bell without navigation or reading and disables itself when empty', async t => {
  let hidden=false, clearedContributions=0;
  const onClear=()=>clearedContributions++;

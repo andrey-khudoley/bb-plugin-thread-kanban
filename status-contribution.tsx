@@ -41,9 +41,16 @@ export function StatusContribution() {
       if (typeof threadId === 'string' && focusStatusChat(threadId, typeof title === 'string' ? title : undefined)) event.preventDefault();
     };
     window.addEventListener('bb:focus-status-chat', focus);
+    const focusIssue = (event: Event) => {
+      if (event.defaultPrevented) return;
+      const { issueId } = (event as CustomEvent).detail ?? {};
+      if (typeof issueId === 'string' && focusStatusIssue(issueId)) event.preventDefault();
+    };
+    window.addEventListener('bb:focus-status-issue', focusIssue);
     const clear = () => activityStore().hideAll();
     window.addEventListener('bb:clear-status-notifications', clear);
     return () => { observer.disconnect(); window.removeEventListener('bb:focus-status-chat', focus);
+      window.removeEventListener('bb:focus-status-issue', focusIssue);
       window.removeEventListener('bb:clear-status-notifications', clear); };
   }, []);
   return <><DerivationPolling /><span hidden data-bb-status-contribution-count={runs.filter(run => !run.hidden).length} />
@@ -51,9 +58,7 @@ export function StatusContribution() {
       <DerivationNotifications openCard={id => {
         window.dispatchEvent(new Event('bb:close-status-notifications'));
         if (focusStatusIssue(id)) return;
-        const threadId = runs.flatMap(run => run.result?.children ?? []).find(issue => issue.id === id)?.threadIds.at(-1);
-        if (threadId) navigate.toThread(threadId);
-        else navigate.toPluginPanel('board', { subPath: `issue-tree/${id}` });
+        navigate.toPluginPanel('board', { subPath: `issue/${id}` });
       }} openTree={id => {
         window.dispatchEvent(new Event('bb:close-status-notifications'));
         navigate.toPluginPanel('board', { subPath: `issue-tree/${id}` });

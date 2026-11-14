@@ -8,6 +8,7 @@ import { stageOf } from "./board";
 import { issueStages, type Issue } from "./issues";
 import { emptyPlan, planSchema } from "./planning";
 import { toolDefinitions } from "./agent-inputs.mjs";
+import type { ProjectFolders } from './project-folders-server';
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 2000);
 const json = (value: unknown): z.infer<ReturnType<typeof z.json>> => JSON.parse(JSON.stringify(value));
@@ -32,7 +33,7 @@ export function threadSummary(thread: Thread) {
     updatedAt: thread.updatedAt, error: thread.status === "error" || thread.queuedWork === "failed" };
 }
 
-export function registerAgentAccess(bb: BbPluginApi, issues: { list(): Issue[]; get(id: string): Issue }) {
+export function registerAgentAccess(bb: BbPluginApi, issues: { list(): Issue[]; get(id: string): Issue }, folders?: ProjectFolders) {
   const windows = new Map<string, { report: UiReport; receivedAt: number }>();
   const waiters = new Map<string, (report: UiReport) => void>();
   const lifetime = new AbortController();
@@ -115,6 +116,8 @@ export function registerAgentAccess(bb: BbPluginApi, issues: { list(): Issue[]; 
       .sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     const counts = issueStages.map((stage) => ({ ...stage, count: cards.filter((card) => card.stage === stage.id).length }));
     return json({ source: "server", capturedAt: Date.now(), filters: input,
+      sections: projects.filter((project) => !input.projectId || project.id === input.projectId).map(({ id, name }) => ({ id, name })),
+      projectFolders: folders?.list().filter((folder) => !input.projectId || folder.sectionId === input.projectId).map(({ messages, assistant, ...folder }) => folder) ?? [],
       projects: projects.filter((project) => !input.projectId || project.id === input.projectId).map(({ id, name }) => ({ id, name })),
       columns: counts, total: cards.length, cards: cards.slice(input.offset, input.offset + input.limit),
       nextOffset: input.offset + input.limit < cards.length ? input.offset + input.limit : null,

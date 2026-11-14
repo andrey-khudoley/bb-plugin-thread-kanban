@@ -58,6 +58,7 @@
 .kb-list-error > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .kb-list-error button { min-height: 44px; }
 .kb-list-row[data-selected="true"] { background-color: var(--accent); box-shadow: inset 3px 0 var(--primary); }
+.kb-list-row > .kb-card-tag-dots { grid-column: 1 / -1; margin-top: 0; }
 .kb-list-row:focus-within { position: relative; z-index: 1; }
 .kb-list-row :is(button, input):focus-visible, .kb-list-controls :is(input, select, button):focus-visible,
 .kb-list-filter-summary button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }

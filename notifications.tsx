@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRealtime, useRealtimeConnectionState, useRpc } from '@get-bb/plugin-sdk/app';
-import { channel, type contract, type Notice } from './notification-contract';
+import { channel, noticeLabel, type contract, type Notice } from './notification-contract';
 
 export function useNotifications() {
   const rpc = useRpc<typeof contract>();
@@ -19,7 +19,11 @@ export function useNotifications() {
     try { await rpc.call('notifications.viewThread', { threadId }); setRevision(value => value + 1); }
     catch { setError('Не удалось обновить уведомления просмотренного чата.'); throw new Error('viewThread failed'); }
   }, [rpc]);
-  return { ...data, error, viewThread, async clearAll(legacyThreadIds: string[]) {
+  const read = useCallback(async (id: string) => {
+    try { await rpc.call('notifications.read', { id }); setRevision(value => value + 1); }
+    catch { setError('Не удалось отметить уведомление прочитанным.'); }
+  }, [rpc]);
+  return { ...data, error, viewThread, read, async clearAll(legacyThreadIds: string[]) {
     try {
       await rpc.call('notifications.dismissAll', { legacyThreadIds }); setRevision(value => value + 1); return true;
     } catch { setError('Не удалось очистить уведомления.'); return false; }
@@ -29,9 +33,6 @@ export function useNotifications() {
   }, async dismissLegacy(threadId: string) {
     try { await rpc.call('notifications.dismissLegacy', { threadId }); setRevision(value => value + 1); }
     catch { setError('Не удалось скрыть уведомление.'); }
-  }, async read(id: string) {
-    try { await rpc.call('notifications.read', { id }); setRevision(value => value + 1); }
-    catch { setError('Не удалось отметить уведомление прочитанным.'); }
   } };
 }
 
@@ -39,7 +40,7 @@ export function NotificationList({ notices, open, dismiss }: { notices: Notice[]
   return <ul className="kb-status-chat-list">{notices.map(notice => <li className="kb-status-notification-row" key={notice.id}>
     <button type="button" data-notification-id={notice.id} data-unread={notice.readAt === null}
       onClick={() => open(notice)} title={notice.detail}>
-      <span className="kb-status-event-type">{notice.readAt === null ? '● ' : ''}{notice.kind === 'question' ? 'Требуется ответ' : 'Работа завершена'}</span>
+      <span className="kb-status-event-type">{notice.readAt === null ? '● ' : ''}{noticeLabel(notice)}</span>
       <span className="kb-status-chat-title">{notice.title}</span>
       <span className="kb-status-chat-detail">{notice.detail}</span>
     </button>

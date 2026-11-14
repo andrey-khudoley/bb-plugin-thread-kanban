@@ -1,33 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createFakePluginHost, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
+import { createFakePluginHost, makeQueueEntry, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import plugin from "./dist/server.js";
 
 const projectId = "proj_personal";
 
 async function setup(t, readThread = (thread) => thread) {
   const threads = new Map();
+  const latestEvents = new Map();
   const { bb, harness } = createFakePluginHost({ sdk: {
     projects: { get: async () => ({ id: projectId }) },
     threads: {
       get: async ({ threadId }) => readThread(threads.get(threadId)),
       getPluginMetadata: async () => ({}),
+      list: async ({ threadIds }) => [...threads.values()].filter(thread => threadIds.includes(thread.id) && !thread.archivedAt)
+        .map(thread => ({ queuedWork: "none", hasPendingInteraction: false,
+          activity: { activeWorkflowCount: 0, activeBackgroundAgentCount: 0, activeBackgroundCommandCount: 0, activePlanModeCount: 0 },
+          ...thread })),
+      events: { list: async ({ threadId }) => latestEvents.has(threadId) ? [latestEvents.get(threadId)] : [] },
     },
   } });
   t.after(() => harness.lifecycle.dispose());
   await plugin(bb);
   const call = (method, input) => harness.behavior.callRpc(method, input);
   const addThread = (id, overrides) => threads.set(id, makeThreadResponse({ id, projectId, ...overrides }));
-  async function change(threadId, status) {
-    const thread = { ...threads.get(threadId), status };
+  async function change(threadId, status, lastAssistantText = "Готово", completionStatus = "completed") {
+    const thread = { ...threads.get(threadId), status, runtime: { displayStatus: status } };
     threads.set(threadId, thread);
+    latestEvents.set(threadId, { type: status === "active" ? "turn/started" : "turn/completed",
+      createdAt: Date.now(), data: { status: completionStatus } });
     const result = status === "active"
       ? await harness.behavior.emitThreadEvent("thread.active", { thread })
-      : await harness.behavior.emitThreadEvent("thread.idle", { thread, lastAssistantText: "Готово" });
+      : await harness.behavior.emitThreadEvent("thread.idle", { thread, lastAssistantText });
     assert.deepEqual(result.errors, []);
   }
   const stage = async (id) => (await call("issueList", null)).find((issue) => issue.id === id)?.status;
-  return { addThread, call, change, stage, harness, signals: harness.inspection.realtimeSignals };
+  return { addThread, call, change, stage, harness, latestEvents, signals: harness.inspection.realtimeSignals };
 }
 
 test("removes a deleted chat from its card while keeping other linked chats", async (t) => {
@@ -137,19 +145,152 @@ test("reopens a finished chat card on a new turn and persists both transitions",
   const threadId = "thr_chat";
   addThread(threadId);
   const { id } = await call("issueCreate", { projectId, status: "done", threadId });
-  const signalsBeforeTurn = signals.length;
+  const issueSignals = () => signals.filter(signal => signal.channel === "issues-changed").length;
+  const signalsBeforeTurn = issueSignals();
 
   await change(threadId, "active");
   assert.equal(await stage(id), "working");
   await change(threadId, "idle");
   assert.equal(await stage(id), "review");
-  assert.equal(signals.length, signalsBeforeTurn + 2);
+  assert.equal(issueSignals(), signalsBeforeTurn + 2);
 
   const { harness: reloaded } = await harness.lifecycle.reload(plugin);
   t.after(() => reloaded.lifecycle.dispose());
   const [card] = await reloaded.behavior.callRpc("issueList", null);
   assert.equal(card.id, id);
   assert.equal(card.status, "review");
+});
+
+test("reviews a successful incoming-message turn even when its final reply is empty", async (t) => {
+  for (const reply of [null, ""]) await t.test(`reply ${JSON.stringify(reply)}`, async (t) => {
+    const { addThread, call, change, stage, harness } = await setup(t);
+    addThread("thr_incoming");
+    const { id } = await call("issueCreate", { projectId, status: "done", threadId: "thr_incoming", test: true });
+    await change("thr_incoming", "active");
+    assert.equal(await stage(id), "working");
+    await change("thr_incoming", "idle", reply);
+    assert.equal(await stage(id), "review");
+    const { harness: reloaded } = await harness.lifecycle.reload(plugin);
+    t.after(() => reloaded.lifecycle.dispose());
+    const [saved] = await reloaded.behavior.callRpc("issueList", null);
+    assert.equal(saved.status, "review");
+    assert.deepEqual(saved.tags, ["Test"]);
+  });
+});
+
+test("does not review an interrupted or failed empty turn", async (t) => {
+  for (const outcome of ["interrupted", "failed"]) await t.test(outcome, async (t) => {
+    const { addThread, call, change, stage } = await setup(t);
+    addThread("thr_incoming");
+    const { id } = await call("issueCreate", { projectId, status: "working", threadId: "thr_incoming", test: true });
+    await change("thr_incoming", "idle", null, outcome);
+    assert.equal(await stage(id), "working");
+  });
+});
+
+test("recovers a persisted working card from a successful completion after reload", async (t) => {
+  const { addThread, call, harness, latestEvents } = await setup(t);
+  addThread("thr_missed");
+  const card = await call("issueCreate", { projectId, status: "working", threadId: "thr_missed", test: true });
+  latestEvents.set("thr_missed", { type: "turn/completed", createdAt: card.updatedAt + 1, data: { status: "completed" } });
+  const { harness: reloaded } = await harness.lifecycle.reload(plugin);
+  t.after(() => reloaded.lifecycle.dispose());
+  const recovery = reloaded.behavior.runService("issue-status-recovery");
+  await recovery.done;
+  const [saved] = await reloaded.behavior.callRpc("issueList", null);
+  assert.equal(saved.status, "review");
+  assert.equal(saved.version, card.version + 1);
+  assert.ok(reloaded.inspection.realtimeSignals.some(signal => signal.channel === "issues-changed"));
+  await reloaded.behavior.runService("issue-status-recovery").done;
+  assert.equal((await reloaded.behavior.callRpc("issueList", null))[0].version, saved.version);
+});
+
+test("recovery preserves manual working status and inconclusive or unsuccessful runs", async (t) => {
+  const cases = [
+    ["manual working after completion", {}, { type: "turn/completed", data: { status: "completed" } }, -1],
+    ["no lifecycle evidence", {}, null],
+    ["unfinished turn", {}, { type: "turn/started", data: {} }],
+    ["new request after completion", {}, { type: "client/turn/requested", data: {} }],
+    ["interrupted thread", {}, { type: "system/thread/interrupted", data: {} }],
+    ["failed turn", { status: "error" }, { type: "turn/completed", data: { status: "failed" } }],
+  ];
+  for (const [name, overrides, event, offset = 1] of cases) await t.test(name, async (t) => {
+    const { addThread, call, stage, harness, latestEvents } = await setup(t);
+    addThread("thr_missed", overrides);
+    const card = await call("issueCreate", { projectId, status: "working", threadId: "thr_missed", test: true });
+    if (event) latestEvents.set("thr_missed", { ...event, createdAt: card.updatedAt + offset });
+    await harness.behavior.runService("issue-status-recovery").done;
+    assert.equal(await stage(card.id), "working");
+  });
+});
+
+test("completion and recovery wait for linked work, queued messages and user interactions", async (t) => {
+  const cases = [
+    ["running", { status: "active" }],
+    ["starting", { status: "starting" }],
+    ["waiting for host", { runtime: { displayStatus: "waiting-for-host" } }],
+    ["queued message", { queuedWork: "waiting" }],
+    ["failed queued message", { queuedWork: "failed" }],
+    ["pending interaction", { hasPendingInteraction: true }],
+    ["background command", { activity: { activeBackgroundCommandCount: 1 } }],
+    ["background agent", { activity: { activeBackgroundAgentCount: 1 } }],
+    ["workflow", { activity: { activeWorkflowCount: 1 } }],
+    ["plan", { activity: { activePlanModeCount: 1 } }],
+  ];
+  for (const [name, overrides] of cases) await t.test(name, async (t) => {
+    const { addThread, call, change, stage, harness, latestEvents } = await setup(t);
+    addThread("thr_completed");
+    addThread("thr_busy", overrides);
+    const card = await call("issueCreate", { projectId, status: "working", threadId: "thr_completed", test: true });
+    await call("issueLink", { id: card.id, threadId: "thr_busy", linked: true });
+    latestEvents.set("thr_busy", { type: "turn/completed", createdAt: 1, data: { status: "completed" } });
+    await change("thr_completed", "idle", null);
+    assert.equal(await stage(card.id), "working");
+    await harness.behavior.runService("issue-status-recovery").done;
+    assert.equal(await stage(card.id), "working");
+  });
+});
+
+test("recovery keeps the card working when a linked chat cannot be read", async (t) => {
+  const { addThread, call, stage, harness, latestEvents } = await setup(t);
+  addThread("thr_unavailable");
+  const card = await call("issueCreate", { projectId, status: "working", threadId: "thr_unavailable", test: true });
+  latestEvents.set("thr_unavailable", { type: "turn/completed", createdAt: card.updatedAt + 1, data: { status: "completed" } });
+  harness.sdk.stub("threads.get", async () => { throw new Error("Host unavailable"); });
+  await harness.behavior.runService("issue-status-recovery").done;
+  assert.equal(await stage(card.id), "working");
+  harness.sdk.stub("threads.get", async () => makeThreadResponse({ id: "thr_unavailable", projectId }));
+  harness.sdk.stub("threads.list", async () => []);
+  await harness.behavior.runService("issue-status-recovery").done;
+  assert.equal(await stage(card.id), "working");
+});
+
+test("new work and manual changes invalidate recovery while it reads completion evidence", async (t) => {
+  for (const change of ["new turn", "queued message", "manual move"]) await t.test(change, async (t) => {
+    const { addThread, call, stage, harness } = await setup(t);
+    addThread("thr_race");
+    const card = await call("issueCreate", { projectId, status: "working", threadId: "thr_race", test: true });
+    const reading = Promise.withResolvers();
+    const releaseRead = Promise.withResolvers();
+    harness.sdk.stub("threads.events.list", async () => {
+      reading.resolve();
+      await releaseRead.promise;
+      return [{ type: "turn/completed", createdAt: card.updatedAt + 1, data: { status: "completed" } }];
+    });
+    const recovery = harness.behavior.runService("issue-status-recovery");
+    await reading.promise;
+    try {
+      if (change === "manual move") await call("issueMove", { id: card.id, status: "todo" });
+      else if (change === "new turn") await harness.behavior.emitThreadEvent("thread.active", {
+        thread: makeThreadResponse({ id: "thr_race", projectId, status: "active" }),
+      });
+      else await harness.behavior.emitThreadEvent("message.queued", { entry: makeQueueEntry({ threadId: "thr_race" }) });
+    } finally {
+      releaseRead.resolve();
+      await recovery.done;
+    }
+    assert.equal(await stage(card.id), change === "manual move" ? "todo" : "working");
+  });
 });
 
 test("reviews a task after its last linked run, and preserves manual completion during a turn", async (t) => {

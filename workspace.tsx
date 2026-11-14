@@ -33,6 +33,7 @@ import { sectionStore } from "./panel-context";
 import { usePanelSection } from "./panel-section-ui";
 import { usePanelState } from "./panel-view-state";
 import { PanelHeading } from "./panel-heading";
+import { TagColorEditor } from './tag-colors-ui';
 
 export const workspaceTab = {
   id: "workspace",
@@ -451,6 +452,7 @@ function TaskPlan({ threadId }: { threadId: string }) {
         <Input value={current.tags} disabled={busy || result.isLoading}
           onChange={(event) => { setFeedback(""); setDraft({ ...current, tags: event.target.value }); }} />
       </label>
+      <TagColorEditor tags={current.tags.split(',')} />
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" size="sm" disabled={!draft || busy || !!result.error}>{busy ? "Сохраняю…" : "Сохранить"}</Button>
         <Button type="button" size="sm" variant="ghost" disabled={!current.notes.trim()}

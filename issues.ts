@@ -50,6 +50,7 @@ const operation = z.object({
 });
 export const issueSchema = fieldsSchema.extend({
   id, projectId: id, status: issueStatus,
+  folderId: id.nullable().default(null),
   threadIds: z.array(id),
   messages: z.array(message),
   order: z.number(), createdAt: z.number(), updatedAt: z.number(), version: z.number(),
@@ -93,7 +94,7 @@ export const issueReviewInput = z.object({ id, threadId: id, environmentId: id,
 export const issueRpc = defineRpcContract({
   issueList: { input: z.null(), output: z.array(issueSchema) },
   issueCreate: {
-    input: z.object({ projectId: id, status: issueStatus, parentId: id.optional(), threadId: id.optional(), test: z.boolean().optional() }).refine(
+    input: z.object({ projectId: id, folderId: id.optional(), status: issueStatus, parentId: id.optional(), threadId: id.optional(), test: z.boolean().optional() }).refine(
       ({ status, threadId }) => initialIssueStatus.safeParse(status).success ||
         (threadId !== undefined && (status === "working" || status === "done")),
       { path: ["status"], message: "Новая задача создаётся в «Бэклоге» или «К выполнению»." },

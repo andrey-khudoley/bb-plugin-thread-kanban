@@ -2,11 +2,22 @@ import { useRef, type MouseEvent } from "react";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { isTestTag, testTag } from "./planning";
+import { useTagColors } from './tag-colors-ui';
+import { colorForTag, tagColorKey } from './tag-colors';
 
 export function TagBadge({ tag }: { tag: string }) {
-  return isTestTag(tag)
-    ? <span className="kb-badge bg-yellow-400 font-semibold text-yellow-950" title={testTag}>{testTag}</span>
-    : <span className="kb-badge bg-muted" title={tag}>{tag}</span>;
+  const colors = useTagColors();
+  const name = isTestTag(tag) ? testTag : tag;
+  const colored = isTestTag(tag) || Object.hasOwn(colors, tagColorKey(tag));
+  const backgroundColor = colorForTag(tag, colors);
+  // Pick readable text for both light and dark custom colors.
+  const channels = [1, 3, 5].map(offset => {
+    const value = parseInt(backgroundColor.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  return <span className={`kb-badge ${colored ? 'font-semibold' : 'bg-muted'}`} title={name}
+    style={colored ? { backgroundColor, color: luminance > 0.179 ? '#000000' : '#ffffff' } : undefined}>{name}</span>;
 }
 
 const paths = {
@@ -38,16 +49,17 @@ export function KanbanIcon({ name }: { name: keyof typeof paths }) {
 export type CardAction = { id?: string; label: string; action: (trigger: HTMLButtonElement | null) => void; destructive?: boolean; disabled?: boolean };
 export type CardActionGroup = { label: string; items: readonly CardAction[] };
 
-export function CardMenu({ label, triggerLabel, triggerIcon, groups }: {
+export function CardMenu({ label, triggerLabel, triggerIcon, groups, onOpenChange }: {
   label: string;
   triggerLabel?: string;
   triggerIcon?: keyof typeof paths;
   groups: readonly CardActionGroup[];
+  onOpenChange?: (open: boolean) => void;
 }) {
   const scope = usePortalScopeProps();
   const trigger = useRef<HTMLButtonElement>(null);
   return (
-    <Dropdown.Root modal={false}>
+    <Dropdown.Root modal={false} onOpenChange={onOpenChange}>
       <Dropdown.Trigger asChild>
         <button ref={trigger} type="button" className={triggerLabel ? "kb-detail-tools" : "kb-icon-button"} aria-label={label} title={label}>
           {triggerIcon && <span className="kb-mobile-tool-icon"><KanbanIcon name={triggerIcon} /></span>}

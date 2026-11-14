@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-thread-kanban",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "mcp": "node mcp.mjs",
@@ -80,6 +80,7 @@
     "README.md",
     "STATUS_BAR.md",
     "PLUGIN_OVERVIEW.md",
+    "docs/PROJECT_FOLDERS.md",
     "CHANGELOG.md",
     "LICENSE",
     "dist/app.js",

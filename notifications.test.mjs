@@ -17,6 +17,9 @@ const interaction = (threadId, id = 'q1', kind = 'user_question') => ({ id, thre
   status: 'pending', payload: kind === 'user_question' ? { kind, questions: [{ id: 'one', prompt: 'Choose an option', required: true }] } : { kind, title: 'Input' } });
 
 async function setup(t) {
+  // Recovery compares event times with plugin startup. Keep that relationship
+  // deterministic even when a full suite or a live deployment occupies the CPU.
+  t.mock.method(Date, 'now', () => now - 1000);
   const threads = [row('a'), row('b')], events = new Map(), interactions = new Map();
   let host = createFakePluginHost({ pluginId: 'thread-kanban', sdk: { threads: {
     list: async ({ threadIds, offset = 0, limit = 200 } = {}) => threads.filter(thread => !threadIds || threadIds.includes(thread.id)).slice(offset, offset + limit),
@@ -194,4 +197,69 @@ test('an explicit visible-chat acknowledgement reads that chat, without resolvin
   assert.equal((await s.list()).notices.length, 0);
   assert.equal(s.interactions.get('a')[0].status, 'pending');
   assert.equal(s.harness.inspection.sdk.callsTo('threads.markRead')[0][0].threadId, 'a');
+});
+
+function derivation(s, patch = {}) {
+  s.threads[0] = row('a', { visibility: 'hidden', originPluginId: 'thread-kanban', title: 'Подготовка подзадач канбана' });
+  const job = { id: 'job-a', workerId: 'a', source: { issueId: 'parent', threadId: 'b', title: 'Исходная задача' },
+    result: { status: 'done', parentId: 'parent', children: [{ id: 'child' }], message: '' }, ...patch };
+  for (const [id, title] of [['parent', 'Исходная задача'], ['child', 'Созданная задача']])
+    s.db.prepare('INSERT OR REPLACE INTO kanban_issues VALUES (?, ?)').run(id, JSON.stringify({ id, title }));
+  const save = () => s.db.prepare('INSERT OR REPLACE INTO kanban_derivations VALUES (?, ?, ?, ?)')
+    .run(job.id, 'issue:parent', Number(job.result.status === 'running'), JSON.stringify(job));
+  save(); return { job, save };
+}
+
+test('saved worker notifications open the generated card across clients and reload without reading the internal chat', async t => {
+  const s = await setup(t); derivation(s);
+  s.events.set('a', [event('a', 1)]); await s.emit();
+  const notice = (await s.list()).notices[0];
+  assert.equal(notice.issueId, 'child'); assert.equal(notice.derivationId, 'job-a');
+  assert.equal(notice.title, 'Созданная задача'); assert.equal(notice.label, 'Задача создана');
+  assert.match(notice.detail, /карточку/);
+  await s.reload(); await s.recover();
+  assert.equal((await s.list()).notices[0].issueId, 'child');
+  await s.harness.behavior.callRpc('notifications.read', { id: notice.id });
+  assert.equal((await s.list()).unread, 0);
+  assert.equal(s.harness.inspection.sdk.callsTo('threads.markRead').length, 0);
+  await s.emit(); assert.equal((await s.list()).unread, 0);
+});
+
+test('a worker completion waits for saved cards and multiple results lead to the parent card', async t => {
+  const s = await setup(t), { job, save } = derivation(s, { result: { status: 'running', children: [], parentId: null } });
+  s.events.set('a', [event('a', 1)]); await s.emit();
+  assert.equal((await s.list()).unread, 0);
+  assert.ok((await s.list()).hiddenLegacyThreads.includes('a'));
+  job.result = { status: 'done', parentId: 'parent', children: [{ id: 'child' }, { id: 'second' }], message: '' }; save();
+  const notice = (await s.list()).notices[0];
+  assert.equal(notice.issueId, 'parent'); assert.equal(notice.label, 'Подзадачи созданы');
+  assert.match(notice.detail, /2/);
+  s.db.prepare('DELETE FROM kanban_issues WHERE id = ?').run('parent');
+  assert.equal((await s.list()).unread, 0);
+});
+
+test('invalid or empty preparation results point to the source and never expose JSON or hidden-worker questions', async t => {
+  const s = await setup(t), { job, save } = derivation(s, { source: { issueId: null, threadId: 'b', title: 'Исходный чат' },
+    result: { status: 'failed', parentId: null, children: [], message: 'Ответ не прошёл проверку.' } });
+  s.events.set('a', [event('a', 1)]); await s.emit();
+  let notice = (await s.list()).notices[0];
+  assert.equal(notice.threadId, 'b'); assert.equal(notice.issueId, undefined);
+  assert.equal(notice.label, 'Ошибка подготовки'); assert.match(notice.detail, /проверку/);
+  await s.harness.behavior.emitThreadEvent('interaction.pending', { thread: s.threads[0], interaction: interaction('a') });
+  assert.equal((await s.list()).unread, 1);
+  job.result = { status: 'done', parentId: null, children: [], message: 'Новых задач нет.' }; save();
+  notice = (await s.list()).notices[0]; assert.equal(notice.label, 'Подготовка завершена');
+  await s.harness.behavior.callRpc('notifications.read', { id: notice.id });
+  assert.deepEqual(s.harness.inspection.sdk.callsTo('threads.markRead').map(([args]) => args.threadId), ['b']);
+  assert.equal((await s.list()).unread, 0);
+});
+
+test('other internal workers are excluded while a user-hidden chat keeps ordinary completion notifications', async t => {
+  const s = await setup(t);
+  s.threads[0] = row('a', { visibility: 'hidden', originPluginId: 'thread-kanban' });
+  s.threads[1] = row('b', { visibility: 'hidden', originPluginId: null });
+  for (const id of ['a', 'b']) { s.events.set(id, [event(id, 1)]); await s.emit(id); }
+  const result = await s.list();
+  assert.equal(result.unread, 1); assert.equal(result.notices[0].threadId, 'b');
+  assert.ok(result.hiddenLegacyThreads.includes('a'));
 });

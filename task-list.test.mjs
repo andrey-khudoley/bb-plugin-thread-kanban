@@ -24,12 +24,20 @@ afterEach(() => { cleanup(); sessionStorage.clear(); });
 function fixture(overrides = {}) {
   const calls = { open: 0, toggle: 0, menu: 0, parent: 0 };
   const props = { id: "a", kind: "issue", projectId: "project", title: "Длинное название задачи", stage: "review", stageLabel: "На проверке",
-    summary: "Задача · Без чата", updatedAt: 123456, chatOpen: false, chatActive: false,
+    summary: "Задача · Без чата", updatedAt: 123456, chatOpen: false, chatActive: false, cardActive: false,
     open: () => calls.open++, toggle: () => calls.toggle++,
     details: React.createElement("button", { onClick: () => calls.parent++ }, "Родительская задача"),
     groups: [{ label: "Навигация", items: [{ label: "Открыть ветку", action: () => calls.menu++ }] }], ...overrides };
   return { ...render(React.createElement(TaskListRow, props)), calls, user: userEvent.setup({ document }) };
 }
+
+test("selected chatless row exposes its card accent independently of chat state", () => {
+  const f = fixture({ cardActive: true });
+  const row = f.container.querySelector('article');
+  assert.equal(row.dataset.cardActive, 'true');
+  assert.equal(row.dataset.chatOpen, 'false');
+  assert.equal(row.dataset.chatActive, 'false');
+});
 
 test("row, primary button and modifiers do not overlap with secondary actions", async () => {
   const f = fixture();
@@ -73,6 +81,25 @@ test("selection controls toggle once and replace opening while selecting", async
   fireEvent.click(f.container.querySelector("article"));
   assert.equal(f.calls.toggle, 3);
   assert.equal(f.calls.open, 0);
+});
+
+test("title starts row dragging, ignores the release click, and remains a normal open button", async () => {
+  let dragged = null, suppress = false;
+  const f = fixture({ drag: { draggable: true, onDragStart: event => { dragged = event.currentTarget; }, onDragEnd: () => { suppress = true; } },
+    suppressClick: () => suppress });
+  const row = f.container.querySelector('article'), title = f.getByRole('button', { name: /^Открыть:/ });
+  assert.equal(title.draggable, true);
+  fireEvent.dragStart(title.querySelector('.kb-card-title'));
+  assert.equal(dragged, row);
+  fireEvent.dragEnd(title);
+  fireEvent.click(title);
+  assert.equal(f.calls.open, 0);
+  suppress = false;
+  await f.user.click(title);
+  title.focus(); await f.user.keyboard('{Enter}');
+  assert.equal(f.calls.open, 2);
+  await f.user.click(f.getByRole('button', { name: /^Подробнее:/ }));
+  assert.ok(f.getByRole('button', { name: /^Скрыть сведения:/ }));
 });
 
 test("keyboard primary and disclosure have distinct targets and unique panel IDs", async () => {

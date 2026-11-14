@@ -33,6 +33,13 @@ test('unavailable or corrupt storage retains in-memory deduplication', () => {
   }
 });
 
+test('generated-result popups retain the card target and result label', () => {
+  const tracker = createArrivalTracker(undefined, 100);
+  const [result] = tracker.observe([notice('result', { threadId: 'internal-worker', issueId: 'created-card',
+    derivationId: 'job', label: 'Задача создана' })]);
+  assert.equal(result.issueId, 'created-card'); assert.equal(result.label, 'Задача создана');
+});
+
 test('popup open and dismiss have separate effects; dismissing never marks a notification read', async t => {
   t.after(cleanup); const opened = [], dismissed = [];
   render(createElement(NotificationPopups, { items: [popup('a'), popup('b')], open: item => opened.push(item), dismiss: id => dismissed.push(id), duration: 10000 }));

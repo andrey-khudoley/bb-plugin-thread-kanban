@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { derivationRpc, initialIssueStatus, type DeriveRequest, type DeriveResult, type Issue } from "./issues";
-import { planSchema, withTestTag } from "./planning";
+import { planSchema, tagsForNewCard } from "./planning";
+import { channel as notificationsChanged } from './notification-contract';
 
 const duration = 5 * 60_000;
 const contextBudget = 140_000;
@@ -33,6 +34,7 @@ type Job = {
   id: string; key: string; request: DeriveRequest; started: number;
   workerId: string | null; source: Source | null; entries: Entry[]; result: DeriveResult;
 };
+export type { Job as DerivationJob };
 
 function activityText(event: WorkerEvent): string | undefined {
   switch (event.type) {
@@ -87,9 +89,11 @@ export function registerDerivations(bb: BbPluginApi, db: ReturnType<BbPluginApi[
     write.run(job.id, job.key, Number(job.result.status === "running"), JSON.stringify(job));
     return job.result;
   };
-  const finish = (job: Job, result: Partial<DeriveResult>) => save({
-    ...job, entries: [], request: { ...job.request, instruction: "" }, result: { ...job.result, ...result },
-  });
+  const finish = (job: Job, result: Partial<DeriveResult>) => {
+    const saved = save({ ...job, entries: [], request: { ...job.request, instruction: "" }, result: { ...job.result, ...result } });
+    bb.realtime.publish(notificationsChanged, {});
+    return saved;
+  };
   const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
   const fail = (job: Job, error: unknown) => finish(job, { status: "failed", message: errorText(error).slice(0, 1000) });
   const phase = (job: Job, phase: DeriveResult["phase"]) => {
@@ -210,7 +214,7 @@ export function registerDerivations(bb: BbPluginApi, db: ReturnType<BbPluginApi[
         }
         const tasks = batch.tasks.map(({ fragments, ...task }) => ({
           ...task,
-          tags: job.request.test ? withTestTag(task.tags) : task.tags,
+          tags: tagsForNewCard(task.tags, job.request.test),
           context: fragments.flatMap(({ source: index, text }) => {
             const entry = job.entries[index];
             return entry?.text.includes(text) ? [{ label: entry.label, text }] : [];
@@ -300,7 +304,7 @@ export function registerDerivations(bb: BbPluginApi, db: ReturnType<BbPluginApi[
             "Верни только JSON вида {message: string, tasks: [{title, description, notes, executionPrompt, priority, tags, assignee, status, fragments: [{source: number, text: string}]}]}.",
             "title до 180 символов; description — результат и границы; notes — план и проверки; executionPrompt — самостоятельный промпт запуска с критериями готовности. Эти три поля до 12000 символов каждое.",
             "priority: urgent, high, normal, low или null; tags: до 12 коротких меток; assignee: пустая строка, если исполнитель явно не указан; status: backlog или todo, если задача готова к работе.",
-            "Добавляй тег Test, если instruction прямо просит создать пробную карточку для проверки самого канбана или явно требует тег Test. Задачи на разработку и тестирование продукта сами по себе этого тега не требуют.",
+            "Тег Test задаётся только явным параметром запроса test: true и применяется при сохранении. Не добавляй его по исходному контексту или instruction. Задачи на разработку и тестирование продукта сами по себе этого тега не требуют.",
             "Включай только нужные сведения. fragments: до 8 коротких дословных фрагментов из entries, source — индекс с нуля, text — не более 2000 символов. Не цитируй секреты, ключи, токены и пароли. Промпт и описание не должны предполагать доступ к исходному чату.",
             JSON.stringify({ title: source.title, instruction: request.instruction, existingSubtasks, entries }),
           ].join("\n");

@@ -23,10 +23,11 @@ function tab(context, pluginId = 'thread-kanban') {
     detail: { kind: 'plugin', pluginId, tab: { id: 'context', context: { kind: 'nav-panel', panelId: 'board' } }, params: { sectionId: id } } };
 }
 function Card({ id }) {
-  const { chatOpen, chatActive } = useChatHighlight(id === 'issue' ? ['a', 'b'] : [id]);
-  return React.createElement('article', { 'data-testid': id, 'data-chat-open': chatOpen, 'data-chat-active': chatActive });
+  const issueId = id === 'issue' ? 'task' : id.startsWith('chatless') ? id : undefined;
+  const { chatOpen, chatActive, cardActive } = useChatHighlight(id === 'issue' ? ['a', 'b'] : issueId ? [] : [id], issueId);
+  return React.createElement('article', { 'data-testid': id, 'data-chat-open': chatOpen, 'data-chat-active': chatActive, 'data-card-active': cardActive });
 }
-function Cards() { return ['a', 'b', 'closed', 'issue'].map(id => React.createElement(Card, { key: id, id })); }
+function Cards() { return ['a', 'b', 'closed', 'issue', 'chatless-a', 'chatless-b'].map(id => React.createElement(Card, { key: id, id })); }
 function fixture(t, tabs) {
   const panel = { open: true, selectedKey: tabs[0]?.key ?? null, tabs };
   const releases = [];
@@ -37,6 +38,7 @@ function fixture(t, tabs) {
     change(change) { Object.assign(panel, change); slot.lifecycle.rerender(React.createElement(Cards)); },
     open(id) { let close; act(() => { close = openChatStore.open(id); }); releases.push(close); return () => act(close); },
     state(id) { const card = slot.getByTestId(id); return [card.dataset.chatOpen === 'true', card.dataset.chatActive === 'true']; },
+    active(id) { return slot.getByTestId(id).dataset.cardActive === 'true'; },
   };
 }
 
@@ -56,6 +58,37 @@ test('selection moves the stronger accent while open membership stays unchanged'
   assert.deepEqual(f.state('closed'), [false, false]);
 });
 
+test('chatless card selection follows native tabs and section replacement without opening chats', t => {
+  const issue = issueId => ({ kind: 'issue', issueId, title: 'Одинаковое название', threadId: null,
+    startWithAssistant: false, request: 1, view: 'overview' });
+  const a = tab(issue('chatless-a')), b = tab(issue('chatless-b')), linked = tab(chat('a'));
+  const f = fixture(t, [a, b, linked]);
+  assert.equal(f.active('chatless-a'), true);
+  assert.equal(f.active('chatless-b'), false);
+  assert.deepEqual(f.state('chatless-a'), [false, false]);
+  const opened = openChatStore.getSnapshot();
+  f.change({ selectedKey: a.key }); // Repeated selection is not a toggle.
+  assert.equal(f.active('chatless-a'), true);
+  f.change({ selectedKey: b.key });
+  assert.equal(f.active('chatless-a'), false);
+  assert.equal(f.active('chatless-b'), true);
+  act(() => sectionStore.replace(b.key, issue('chatless-a')));
+  assert.equal(f.active('chatless-a'), true);
+  assert.equal(f.active('chatless-b'), false);
+  act(() => sectionStore.replace(b.key, { ...issue('chatless-a'), view: 'relations' }));
+  assert.equal(f.active('chatless-a'), true);
+  f.change({ selectedKey: linked.key });
+  assert.equal(f.active('chatless-a'), false);
+  assert.equal(f.active('a'), true);
+  assert.equal(f.active('issue'), true);
+  assert.deepEqual(f.state('a'), [true, true]);
+  assert.strictEqual(openChatStore.getSnapshot(), opened);
+  f.change({ selectedKey: a.key, open: false });
+  assert.equal(f.active('chatless-a'), false);
+  f.change({ tabs: [], selectedKey: null, open: true });
+  assert.equal(f.active('chatless-a'), false);
+});
+
 test('native files, launchers, foreign plugins and closed panels have no active chat', t => {
   const a = tab(chat('a')), empty = tab(null), foreign = tab(chat('b'), 'qa-kanban');
   const file = { key: 'file', title: 'a.md', detail: { kind: 'file', path: 'a.md' } };
@@ -65,6 +98,7 @@ test('native files, launchers, foreign plugins and closed panels have no active 
     f.change({ selectedKey });
     assert.deepEqual(f.state('a'), [true, false]);
     assert.deepEqual(f.state('b'), [true, false]);
+    assert.equal(f.active('chatless-a'), false);
   }
   f.change({ selectedKey: a.key, open: false });
   assert.deepEqual(f.state('a'), [true, false]);
@@ -82,6 +116,7 @@ test('replacing a selected section and changing its working chat or view updates
   act(() => sectionStore.replace(a.key, { ...context, view: 'overview' }));
   assert.deepEqual(f.state('a'), [true, false]);
   assert.deepEqual(f.state('b'), [true, false]);
+  assert.equal(f.active('issue'), true);
 });
 
 test('closing one duplicate keeps the chat active until its last native tab closes', t => {

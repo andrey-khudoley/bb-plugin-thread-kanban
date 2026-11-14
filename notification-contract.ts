@@ -5,8 +5,10 @@ export const noticeSchema = z.object({
   id: z.string(), threadId: z.string(), title: z.string(),
   kind: z.enum(['completed', 'question']), detail: z.string(),
   createdAt: z.number(), readAt: z.number().nullable(),
+  issueId: z.string().optional(), derivationId: z.string().optional(), label: z.string().optional(),
 });
 export type Notice = z.infer<typeof noticeSchema>;
+export const noticeLabel = (notice: Notice) => notice.label ?? (notice.kind === 'question' ? 'Требуется ответ' : 'Работа завершена');
 export const channel = 'notifications-changed';
 export const soundChannel = 'sound-arrival';
 export const testNotificationChannel = 'test-notification';

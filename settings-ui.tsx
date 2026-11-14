@@ -180,7 +180,7 @@ export function KanbanSettings() {
     <WindowPlacementSettings />
     <section aria-labelledby="kanban-chat-defaults-title">
       <h3 id="kanban-chat-defaults-title">Новые чаты</h3>
-      <p className="kanban-settings-hint">Модель, уровень усилия и скорость по умолчанию для новых чатов во всех проектах.</p>
+      <p className="kanban-settings-hint">Модель, уровень усилия и скорость по умолчанию для новых чатов во всех разделах.</p>
       <SystemChatSettings />
     </section>
     <p className="kanban-settings-hint">Обновления канбана доступны в настройках установленных плагинов BB.</p>
@@ -254,7 +254,7 @@ function ProjectChatSettings({ composer }: { composer: ReturnType<typeof useComp
       {editing && (
         <dialog ref={dialog} aria-labelledby="chat-defaults-title" onClose={() => setEditing(null)}>
           <h2 id="chat-defaults-title">Настройки</h2>
-          <p>Параметры для новых чатов во всех проектах BB.</p>
+          <p>Параметры для новых чатов во всех разделах BB.</p>
           <SettingsForm initial={saved ?? null} current={editing} onCancel={() => dialog.current?.close()}
             onSaved={async (value) => {
               if (value && baseline.current && sameExecution(baseline.current, composer.selection)) {

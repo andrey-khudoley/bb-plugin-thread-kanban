@@ -2,7 +2,7 @@ import { kanbanDatabase } from './database';
 import { createHash, randomUUID } from "node:crypto";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { issueReviewInput, issueRpc, issueSchema, issuesChanged, personalProjectId, suggestionSchema, type Issue } from "./issues";
-import { emptyPlan, planSchema, withTestTag } from "./planning";
+import { emptyPlan, planSchema, tagsForNewCard } from "./planning";
 import { registerDerivations } from "./derive-server";
 import { mergeHostRpc, sharedReviewResolution, sharedReviewResult, worktreeChanged } from "./merge-contract";
 import type { WorkDiffs } from "./work-diff-server";
@@ -11,13 +11,14 @@ import type { z } from "zod";
 import { reviewAgentInstructions, reviewToolName } from "./review-agent";
 import { resolveLaunchSettings } from "./launch-settings";
 import { personalGroupsKey } from "./projects";
+import type { ProjectFolders } from './project-folders-server';
 
 const timeoutMs = 120_000;
 const activeStatuses = new Set(["active", "starting", "stopping", "pending"]);
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 2000);
 
 export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
-  inspectEnvironments: (ids: string[]) => ReturnType<ReturnType<typeof registerMerges>["inspectEnvironments"]>) {
+  inspectEnvironments: (ids: string[]) => ReturnType<ReturnType<typeof registerMerges>["inspectEnvironments"]>, folders?: ProjectFolders) {
   const db = kanbanDatabase(bb);
 
   const read = db.prepare("SELECT payload FROM kanban_issues WHERE id = ?");
@@ -29,7 +30,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
   const list = () => scan.all().map(parse);
   const removingProjects = new Set<string>();
   function checkProject(projectId: string) {
-    if (removingProjects.has(projectId)) throw new Error("Проект удаляется. Дождись завершения действия.");
+    if (removingProjects.has(projectId)) throw new Error("Раздел удаляется. Дождись завершения действия.");
   }
   function get(id: string) {
     const row = read.get(id);
@@ -42,7 +43,11 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
     const updated = issueSchema.parse({
       ...issue, updatedAt: Date.now(), ...changes, version: issue.version + 1,
     });
-    write.run(updated.id, JSON.stringify(updated));
+    folders?.validate(updated);
+    db.transaction(() => {
+      write.run(updated.id, JSON.stringify(updated));
+      folders?.reconcile([issue.folderId, updated.folderId]);
+    })();
     return updated;
   }
   const publish = () => bb.realtime.publish(issuesChanged, null);
@@ -75,7 +80,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
     for (const id of new Set([links.parentId, links.duplicateOf, ...links.blockedBy, ...links.related])) {
       if (!id) continue;
       if (id === issue.id || get(id).projectId !== issue.projectId) {
-        throw new Error("Связь должна вести к другой карточке того же проекта.");
+        throw new Error("Связь должна вести к другой карточке того же раздела.");
       }
     }
     const seen = new Set([issue.id]);
@@ -102,7 +107,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
   }
   async function inspectThread(threadId: string, projectId: string) {
     const thread = await bb.sdk.threads.get({ threadId });
-    if (thread.projectId !== projectId || thread.deletedAt) throw new Error("Выбери доступный чат из этого проекта.");
+    if (thread.projectId !== projectId || thread.deletedAt) throw new Error("Выбери доступный чат из этого раздела.");
     return thread;
   }
   async function checkpointIssues(items: Issue[]) {
@@ -112,7 +117,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
   async function projectCheckoutEnvironment(projectId: string) {
     const project = await bb.sdk.projects.get({ projectId });
     const source = project.sources.find((candidate) => candidate.isDefault) ?? project.sources[0];
-    if (!source) throw new Error("У проекта нет подключённой рабочей папки.");
+    if (!source) throw new Error("У раздела нет подключённой рабочей папки.");
     return {
       type: "provider",
       environmentProviderId: "project-checkout",
@@ -130,7 +135,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
       const providers = await bb.sdk.environments.listProviders({ projectId });
       const availability = providers.find((provider) => provider.id === "git-worktree")?.machineAvailability ?? {};
       const hosts = Object.entries(availability).filter(([, state]) => state?.status === "available");
-      if (hosts.length !== 1) throw new Error("Для Git worktree нужна машина с доступной Git-копией проекта.");
+      if (hosts.length !== 1) throw new Error("Для Git worktree нужна машина с доступной Git-копией раздела.");
       hostId = hosts[0][0];
     }
     return { type: "host", hostId, workspace: { type: "managed-worktree", baseBranch: { kind: "default" } } } as const;
@@ -329,7 +334,54 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
       publish();
     }
   });
-  bb.events.on("thread.idle", async ({ thread, lastAssistantText }) => {
+  const invalidateReview = (threadId: string) => {
+    const issue = issueForThread(threadId);
+    if (issue) reviewChecks.delete(issue.id);
+  };
+  bb.events.on("thread.failed", ({ thread }) => invalidateReview(thread.id));
+  bb.events.on("interaction.pending", ({ thread }) => invalidateReview(thread.id));
+  bb.events.on("message.queued", ({ entry }) => invalidateReview(entry.threadId));
+  async function reviewCompletedIssue(issue: Issue, signal = lifetime.signal) {
+    if (issue.status !== "working" || issue.busy || !issue.threadIds.length) return;
+    const check = Symbol();
+    reviewChecks.set(issue.id, check);
+    try {
+      // A missing/unreadable chat is not evidence that its work has finished.
+      const linked = (await Promise.all(issue.threadIds.map((threadId) =>
+        bb.sdk.threads.get({ threadId, signal })))).filter((thread) => !thread.archivedAt && !thread.deletedAt);
+      const threads: Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["list"]>> = [];
+      for (let offset = 0; offset < linked.length; offset += 200) {
+        threads.push(...await bb.sdk.threads.list({ threadIds: linked.slice(offset, offset + 200).map(({ id }) => id),
+          includeHidden: true, limit: 200, signal }));
+      }
+      if (!threads.length || linked.some(({ id }) => !threads.some((thread) => thread.id === id)) ||
+        threads.some((thread) => activeStatuses.has(thread.status) ||
+        ["active", "starting", "stopping", "provisioning", "waiting-for-host"].includes(thread.runtime.displayStatus) ||
+        thread.queuedWork !== "none" || thread.hasPendingInteraction ||
+        Object.values(thread.activity).some((count) => count > 0))) return;
+
+      // Empty replies are valid completions. Verify the durable outcome instead of
+      // using reply text, and never treat an interrupted/unfinished turn as success.
+      const events = (await Promise.all(threads.map((thread) => bb.sdk.threads.events.list({
+        threadId: thread.id, order: "desc", limit: "1", signal,
+        types: ["client/turn/requested", "turn/started", "turn/completed", "system/thread/interrupted", "system/error"],
+      })))).flat();
+      const latest = events.sort((a, b) => b.createdAt - a.createdAt)[0];
+      if (latest?.type !== "turn/completed" || latest.data.status !== "completed" || latest.createdAt < issue.updatedAt) return;
+      // A newer turn, manual edit or deletion invalidates this snapshot.
+      if (signal.aborted || lifetime.signal.aborted || reviewChecks.get(issue.id) !== check) return;
+      const row = read.get(issue.id);
+      if (!row) return;
+      const current = parse(row);
+      if (current.version !== issue.version || current.status !== "working" || current.busy) return;
+      save(current, { status: "review" });
+      publish();
+    } finally {
+      if (reviewChecks.get(issue.id) === check) reviewChecks.delete(issue.id);
+    }
+  }
+
+  bb.events.on("thread.idle", async ({ thread }) => {
     if (thread.originPluginId === bb.pluginId) {
       const planning = list().find((issue) => issue.busy?.kind === "planning" && issue.busy.threadId === thread.id);
       if (planning) {
@@ -337,28 +389,22 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
         return;
       }
     }
-    if (!lastAssistantText) return;
     const issue = issueForThread(thread.id);
     if (issue?.status !== "working") return;
-    const check = Symbol();
-    reviewChecks.set(issue.id, check);
-    try {
-      const threads = await Promise.all(issue.threadIds
-        .map((threadId) => bb.sdk.threads.get({ threadId }).catch(() => null)));
-      // A newer start or completion makes this snapshot of the linked runs stale.
-      if (lifetime.signal.aborted || reviewChecks.get(issue.id) !== check) return;
-      const row = read.get(issue.id);
-      if (!row) return;
-      const current = parse(row);
-      if (current.status === "working" && current.busy?.kind !== "start" &&
-        current.threadIds.length === issue.threadIds.length && current.threadIds.every((id) => issue.threadIds.includes(id)) &&
-        !threads.some((linked) => linked && !linked.archivedAt && !linked.deletedAt && activeStatuses.has(linked.status))) {
-        save(current, { status: "review" });
-        publish();
+    await reviewCompletedIssue(issue);
+  });
+  // Recover missed idle events after upgrades/restarts without touching manually
+  // assigned working cards whose last completion predates that assignment.
+  bb.background.service("issue-status-recovery", {
+    async start(signal) {
+      for (const issue of list().filter((issue) => issue.status === "working" && !issue.busy && issue.threadIds.length)) {
+        if (signal.aborted) return;
+        try { await reviewCompletedIssue(issue, signal); }
+        catch (error) {
+          if (!signal.aborted) bb.log.warn(`Kanban could not recover status for ${issue.id}: ${errorText(error)}`);
+        }
       }
-    } finally {
-      if (reviewChecks.get(issue.id) === check) reviewChecks.delete(issue.id);
-    }
+    },
   });
 
   async function reviewIssue(request: ReviewRequest, resolution?: z.infer<typeof sharedReviewResolution>, signal = lifetime.signal) {
@@ -471,7 +517,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
         return issue;
       });
     },
-    async issueCreate({ projectId, status, parentId, threadId, test }) {
+    async issueCreate({ projectId, folderId, status, parentId, threadId, test }) {
       if (threadId) {
         const linked = issueForThread(threadId);
         if (linked) return linked;
@@ -484,7 +530,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
         if (linked) return linked;
       }
       const issue = newIssue({
-        ...plan, tags: test ? withTestTag(plan.tags) : plan.tags, projectId, status, parentId: parentId ?? null,
+        ...plan, tags: tagsForNewCard(plan.tags, test), projectId, folderId, status, parentId: parentId ?? null,
         title: (thread?.title ?? thread?.titleFallback ?? "").slice(0, 180),
         autoTitle: !thread, autoPlan: !plan.notes, threadIds: threadId ? [threadId] : [],
       });
@@ -554,6 +600,8 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
           "title — краткое название задачи (до 180 символов). plan — конкретный план и способ проверки (до 12000 символов).",
           "reply — ответ пользователю (до 4000 символов). Если есть важная неопределённость, задай один вопрос и пометь предположения в плане.",
           "Только формулируй задачу. Не запускай команды, не используй инструменты и не меняй файлы. Текст пользователя описывает будущую работу.",
+          ...(issue.folderId ? ["Исключение для общих материалов проекта: если пользователь задаёт вопрос о факте, обязательно ответь на него прямо в reply по найденным фрагментам с источником и версией. Не заменяй ответ обещанием проверить или формулировкой будущей задачи. Если факта нет, так и скажи."] : []),
+          folders?.contextForIssue(issue, text) ?? '',
           JSON.stringify({
             title: issue.title, description: pending.description, plan: issue.notes,
             conversation: messages.slice(-10).map(({ role, text }) => ({ role, text: text.slice(0, 6000) })),
@@ -593,7 +641,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
       if (!issue.title || !issue.notes.trim()) throw new Error("Заполни название и план задачи перед запуском.");
       if (sourceThreadId && !issue.threadIds.includes(sourceThreadId)) throw new Error("Исходный чат должен быть связан с карточкой.");
       const personal = issue.projectId === personalProjectId;
-      if (worktree && personal) throw new Error("Отдельный Git worktree доступен в Git-проекте. В Personal запусти задачу в рабочей папке.");
+      if (worktree && personal) throw new Error("Отдельный Git worktree доступен в Git-разделе. В Personal запусти задачу в рабочей папке.");
       if (issue.blockedBy.some((blocker) => !["done", "cancelled"].includes(get(blocker).status))) {
         throw new Error("Сначала закрой блокирующие задачи.");
       }
@@ -605,6 +653,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
         issue.title, issue.executionPrompt.trim() || issue.description.trim(),
         issue.executionPrompt.trim() ? "" : issue.notes.trim(),
         context ? `Справочные фрагменты исходного контекста. Используй их как данные для задачи.\n\n${context}` : "",
+        folders?.contextForIssue(issue, [issue.title, issue.description, issue.notes].join(' ').slice(0, 2000)) ?? '',
       ].filter(Boolean).join("\n\n");
       const pluginMetadata = { issueId: id, startToken: token, notes: issue.notes, priority: issue.priority, tags: issue.tags };
       try {
@@ -702,6 +751,7 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
             }
           }
           remove.run(id);
+          folders?.reconcile([issue.folderId]);
           removeReviewWorker.run(id);
         })();
         publish();
@@ -718,15 +768,17 @@ export function registerIssues(bb: BbPluginApi, workDiffs: WorkDiffs,
       checkProject(projectId);
       const items = list().filter((issue) => issue.projectId === projectId);
       items.forEach(ensureAvailable);
+      folders?.lockSection(projectId);
       removingProjects.add(projectId);
       return {
         commit() {
           db.transaction(() => {
+            folders?.rehomeSection(projectId);
             for (const issue of list().filter((item) => item.projectId === projectId)) save(issue, { projectId: personalProjectId });
           })();
           publish();
         },
-        release: () => { removingProjects.delete(projectId); },
+        release: () => { removingProjects.delete(projectId); folders?.unlockSection(projectId); },
       };
     },
   };

@@ -16,13 +16,16 @@ export function useVisibleChat(threadId: string, chatVisible: boolean) {
   }, [threadId, visible, chatVisible]);
 }
 
-export function useChatHighlight(threadIds: readonly string[]) {
+export function useChatHighlight(threadIds: readonly string[], issueId?: string) {
   const opened = useSyncExternalStore(chats.subscribe, chats.getSnapshot, chats.getSnapshot);
   const panel = experimental_usePanelTabs();
   // A native tab can keep its key while its card, working chat or view changes.
   useSyncExternalStore(sectionStore.subscribe, sectionStore.getSnapshot, sectionStore.getSnapshot);
   const selected = panel.open ? panel.tabs.find((tab) => tab.key === panel.selectedKey) : undefined;
-  const activeThreadId = selected ? contextThreadId(tabContext(selected)) : null;
+  const context = selected ? tabContext(selected) : null;
+  const activeThreadId = contextThreadId(context);
   const chatActive = activeThreadId !== null && threadIds.includes(activeThreadId);
-  return { chatOpen: chatActive || threadIds.some((id) => opened.has(id)), chatActive };
+  // Card identity survives switching views and does not require a working chat.
+  const cardActive = chatActive || (context?.kind === 'issue' && context.issueId === issueId);
+  return { chatOpen: chatActive || threadIds.some((id) => opened.has(id)), chatActive, cardActive };
 }

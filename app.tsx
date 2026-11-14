@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { KanbanAgentBridge, setAgentGeneration, useAgentView } from "./agent-ui";
 import { registerSettingsUi } from "./settings-ui";
 import {
@@ -15,6 +15,7 @@ import {
   type PluginSidebarThread as Thread,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
+import { CardDropZone, ChatProjectDialog, MoveCardsDialog, ProjectCardActions, StageDropButton, useCardDrop, useCardRelocation, useProjectCardActions, type MoveCards } from './project-card-actions';
 import * as Popover from "@radix-ui/react-popover";
 import { z } from "zod";
 import { Button } from "./components/ui/button";
@@ -25,7 +26,7 @@ import {
 } from "./components/ui/dialog";
 import { ancestorsOf, columns, descendantIds, indexThreads, stageOf, type ThreadIndex } from "./board";
 import { openChatWorkspace, workspaceTab } from "./workspace";
-import { planChanged, planRpc, priorities, type Plan } from "./planning";
+import { planChanged, planRpc, planSchema, priorities, tagsForNewCard, type Plan } from "./planning";
 import { initialIssueStatus, issueRpc, issueStages, issueStatus, personalProjectId, type Issue, type IssueStatus } from "./issues";
 import { issueTab, openIssue, useIssues } from "./issue-panel";
 import { DeleteIssueDialog } from "./delete-issue-dialog";
@@ -60,6 +61,14 @@ import { compareListItems } from "./task-list-order";
 import { useListViewContext } from "./list-view-context";
 import "./task-list.css";
 import "./artifact-tabs.css";
+import { cardPresentation, isAgentWorking, type ActivityThread } from './card-activity';
+import { cardActivityRpc } from './card-activity-contract';
+import { CardActivityContext, CardActivityLine, CardStatus, useBoardActivities, useCardActivities } from './card-activity-ui';
+import { useCardTags } from './card-tags';
+import { cardWorkStartedAt } from './card-work-time';
+import { CardWorkTime } from './card-work-time-ui';
+import { CardTagDots, TagColorsProvider } from './tag-colors-ui';
+import { CreateCardDialog, ProjectFolderCard, ProjectFolderDialog, useProjectFolders } from './project-folders-ui';
 
 type Operation = { kind: "fork" | "move"; thread: ChatNode };
 type StartOperation = (kind: Operation["kind"], thread: ChatNode) => void;
@@ -73,7 +82,9 @@ const issueDragType = "application/x-bb-kanban-issue";
 const columnPreferencesKey = "thread-kanban:collapsed-stages";
 const viewPreferencesKey = "thread-kanban:board-view";
 const foldedColumnWidth = 2.625;
-const openColumnMinWidth = 12.5;
+// Keep a readable card in split panes too. The board already owns horizontal
+// scrolling; columns must not squeeze the title and actions to fit all stages.
+const openColumnMinWidth = 16.5;
 const columnGap = 0.5;
 const headingByStage = new Map(columns.map((column) => [column.id, column]));
 const legacyStage = { new: "backlog", working: "working", waiting: "working", done: "done" } as const;
@@ -151,10 +162,15 @@ function ThreadCard({ thread, index, start, plan, createIssue, derive, selection
   thread: Thread; index: Index; start: StartOperation; plan?: Plan; createIssue: () => void; derive: OpenDerivation;
   listView?: boolean; selection: ReadonlySet<string> | null; toggle: (id: string) => void; worktrees: WorktreeStatuses; changeArchive: ChangeArchive;
 }) {
-  const { chatOpen, chatActive } = useChatHighlight([thread.id]);
+  const samples = useCardActivities();
+  const activity = cardPresentation([thread], samples);
+  const workTime = <CardWorkTime stage={legacyStage[stageOf(thread)]} startedAt={cardWorkStartedAt([thread], samples)} />;
+  const tags = useCardTags(plan?.tags ?? [], thread.id);
+  const { chatOpen, chatActive, cardActive } = useChatHighlight([thread.id]);
   const panel = experimental_useAppPanel();
   const navigate = useBbNavigate();
   const deleteActions = useDeleteChatActions(thread);
+  const projectActions = useProjectCardActions();
   const branchCount = index.children.has(thread.id) ? descendantIds(thread.id, index).size : 0;
   const ancestors = ancestorsOf(thread, index);
   const path = ancestors.map((parent) => parent.displayTitle).join(" / ");
@@ -172,14 +188,17 @@ function ThreadCard({ thread, index, start, plan, createIssue, derive, selection
       { label: "Создать форк чата", action: () => start("fork", thread) },
       { label: "Переместить чат в ветку", action: () => start("move", thread) },
       { label: "Создать карточку для этого чата", action: createIssue },
+      ...(projectActions ? [{ label: 'Добавить в проект…', action: (trigger: HTMLButtonElement | null) => projectActions.openChatProject(thread.id, trigger) }] : []),
       ...archiveActions(thread, changeArchive),
       ...deleteActions,
     ] },
   ];
   if (listView) return <TaskListRow id={thread.id} kind="thread" projectId={thread.projectId} title={thread.displayTitle}
     stage={legacyStage[stageOf(thread)]} stageLabel={issueStages.find((stage) => stage.id === legacyStage[stageOf(thread)])!.label}
-    summary={parent ? "Дочерний чат" : "Чат"} updatedAt={thread.updatedAt} selected={selection?.has(thread.id)} chatOpen={chatOpen} chatActive={chatActive}
+    summary={parent ? "Дочерний чат" : "Чат"} updatedAt={thread.updatedAt} selected={selection?.has(thread.id)} chatOpen={chatOpen} chatActive={chatActive} cardActive={cardActive}
     open={open} toggle={() => toggle(thread.id)} groups={groups}
+    workTime={workTime}
+    tags={plan?.tags}
     signals={<>{failed && <span className="text-destructive">Ошибка</span>}{thread.hasPendingInteraction && <span>Ожидает ввод</span>}
       {thread.isUnread && <span>Непрочитанное</span>}{thread.isArchived && <span>Архив</span>}{thread.isHidden && <span>Скрытый</span>}</>}
     details={<>
@@ -190,24 +209,28 @@ function ThreadCard({ thread, index, start, plan, createIssue, derive, selection
       {!parent && !branchCount && !plan?.priority && !plan?.tags.length && !thread.environment?.isWorktree && <p>Дополнительных сведений нет.</p>}
     </>} />;
   return (
-    <article className="kb-card bg-card" data-selected={selection?.has(thread.id)} data-chat-open={chatOpen} data-chat-active={chatActive}
+    <article {...tags.bindings} className="kb-card bg-card" data-selected={selection?.has(thread.id)} data-chat-open={chatOpen} data-chat-active={chatActive} data-card-active={cardActive}
+      onKeyDown={event => { if (event.target === event.currentTarget && event.key === 'Enter') open(); }}
       data-kanban-card-id={thread.id} data-kanban-kind="thread" data-kanban-project={thread.projectId}
       data-kanban-stage={legacyStage[stageOf(thread)]}
       onClick={(event) => { if (isCardBackgroundClick(event)) open(); }}
       onClickCapture={(event) => {
+        if (!event.currentTarget.contains(event.target as Node)) return;
         if (!event.ctrlKey && !event.metaKey) return;
         event.preventDefault();
         event.stopPropagation();
         toggle(thread.id);
       }}>
-      {parent && (
-        <button type="button" title={path} className="mb-1 block max-w-full truncate text-left text-xs text-muted-foreground"
-          onClick={() => navigate.toPluginPanel(panelPath, { subPath: `branch/${parent.id}` })}>
-          {path}
-        </button>
-      )}
-      <button type="button" title={thread.displayTitle} onClick={open}
-        className="kb-card-title font-medium text-foreground">{thread.displayTitle}</button>
+      <div className="kb-card-heading">
+        <button type="button" title={thread.displayTitle} onClick={open}
+          className="kb-card-title font-medium text-foreground">{thread.displayTitle}</button>
+        <CardStatus value={activity} open={open} />
+      </div>
+      <CardActivityLine value={activity} />
+      {workTime}
+      <CardTagDots tags={plan?.tags ?? []} />
+      {parent && <button type="button" title={path} className="kb-card-parent"
+        onClick={() => navigate.toPluginPanel(panelPath, { subPath: `branch/${parent.id}` })}>↳ {path}</button>}
       <div className="kb-card-footer">
         <div className="kb-card-meta text-muted-foreground">
           {selection && <input type="checkbox" aria-label={`Выбрать чат: ${thread.displayTitle}`}
@@ -219,60 +242,81 @@ function ThreadCard({ thread, index, start, plan, createIssue, derive, selection
             Ветка · {branchCount}
           </button>}
           {plan?.priority && <span className="kb-badge bg-muted text-foreground">{priorities[plan.priority]}</span>}
-          {plan?.tags.map((tag) => <TagBadge key={tag} tag={tag} />)}
           {thread.isArchived && <span className="kb-badge bg-muted">Архив</span>}
           {thread.isHidden && <span className="kb-badge bg-muted">Скрытый</span>}
-          {failed && <span className="kb-badge text-destructive">Ошибка</span>}
-          {thread.hasPendingInteraction && <span className="kb-badge bg-muted">Ожидает ввод</span>}
         </div>
         <div className="kb-card-tools">
-          <CardMenu label={`Действия с чатом: ${thread.displayTitle}`} groups={groups} />
+          <CardMenu label={`Действия с чатом: ${thread.displayTitle}`} groups={groups} onOpenChange={tags.onMenuOpenChange} />
         </div>
       </div>
+      {tags.tooltip}
     </article>
   );
 }
 
-function IssueCard({ issue, issues, index, move, selection, toggle, derive, worktrees, remove, chatActions, archived, listView = false }: {
-  listView?: boolean; issue: Issue; issues: Issue[]; index: Index; move: (id: string, status: IssueStatus, beforeId?: string) => void;
+function IssueCard({ issue, issues, index, selection, toggle, derive, worktrees, remove, chatActions, archived, threadStates, listView = false }: {
+  listView?: boolean; issue: Issue; issues: Issue[]; index: Index;
   selection: ReadonlySet<string> | null; toggle: (id: string) => void; derive: OpenDerivation; worktrees: WorktreeStatuses;
   remove: (issue: Issue) => void; chatActions: (issue: Issue) => CardAction[]; archived: boolean;
+  threadStates: Readonly<Record<string, ActivityThread>>;
 }) {
   const panel = experimental_useAppPanel();
   const navigate = useBbNavigate();
-  const threads = issue.threadIds.flatMap((id) => index.byId.get(id) ?? []);
-  const { chatOpen, chatActive } = useChatHighlight(issue.threadIds);
+  const threads = issue.threadIds.flatMap((id) => index.byId.get(id) ?? threadStates[id] ?? []);
+  const samples = useCardActivities();
+  const workTime = <CardWorkTime stage={issue.status} startedAt={cardWorkStartedAt(threads, samples)} />;
+  const { chatOpen, chatActive, cardActive } = useChatHighlight(issue.threadIds, issue.id);
   const branchId = issue.threadIds.at(-1);
-  const waiting = threads.some((thread) => stageOf(thread) === "waiting");
-  const working = threads.some((thread) => stageOf(thread) === "working");
+  const waiting = threads.some((thread) => !thread.isArchived && thread.hasPendingInteraction);
+  const working = threads.some(isAgentWorking);
   const failed = threads.some((thread) => thread.status === "error" || thread.queuedWork === "failed");
   const parent = issue.parentId ? issues.find((item) => item.id === issue.parentId) : undefined;
   const childCount = issues.filter((item) => item.parentId === issue.id).length;
   const blocked = issue.blockedBy.some((id) => issues.some((item) => item.id === id && !["done", "cancelled"].includes(item.status)));
+  const activity = cardPresentation(threads, samples, { status: issue.status, error: issue.error, busy: issue.busy?.kind, blocked, hasLinkedChats: issue.threadIds.length > 0 });
+  const previewThreadId = activity.threadId ?? issue.threadIds.at(-1);
+  const tags = useCardTags(issue.tags, previewThreadId);
   const title = issueTitle(issue);
   const tree = (id: string) => navigate.toPluginPanel(panelPath, { subPath: `issue-tree/${id}` });
   const open = () => openIssue(panel, issue, { reuse: true });
+  const projectActions = useProjectCardActions();
+  const cardDrop = useCardDrop({ sectionId: projectActions?.sectionOf(issue.projectId) ?? issue.projectId,
+    folderId: issue.folderId ?? null, ...(listView ? { positionScope: 'project' as const } : { status: issue.status }), beforeId: issue.id });
+  const drag = {
+    draggable: !issue.busy,
+    onDragStart: (event: DragEvent<HTMLElement>) => {
+      if (issue.busy) { event.preventDefault(); return; }
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData(issueDragType, issue.id);
+      const box = event.currentTarget.getBoundingClientRect();
+      event.dataTransfer.setDragImage(event.currentTarget, event.clientX - box.left, event.clientY - box.top);
+      projectActions?.start(issue.id);
+    },
+    onDragEnd: () => projectActions?.end(),
+  };
   const groups: CardActionGroup[] = [
-    { label: "Навигация", items: [
+    { label: "Карточка", items: [
       { label: "Открыть карточку", action: open },
+      ...(projectActions ? [{ label: 'Переместить…', disabled: !!issue.busy, action: (trigger: HTMLButtonElement | null) => projectActions.openMove([issue.id], trigger) },
+        ...(issue.folderId ? [{ label: 'Убрать из проекта', disabled: !!issue.busy, action: () => { void projectActions.move([issue.id], { folderId: null }); } }] : [])] : []),
+    ] },
+    { label: 'Связи', items: [
       { label: "Открыть ветку задачи", action: () => tree(issue.id) },
       ...(branchId ? [{ label: "Открыть ветку чата", action: () => navigate.toPluginPanel(panelPath, { subPath: `branch/${branchId}` }) }] : []),
     ] },
     contextActions({ kind: "issue", id: issue.id }, title, derive),
     { label: "Связанные чаты", items: chatActions(issue) },
-    { label: "Управление карточкой", items: [{ label: "Удалить карточку", destructive: true, action: () => remove(issue) }] },
+    { label: "Управление карточкой", items: [
+      { label: "Удалить карточку", destructive: true, action: () => remove(issue) }] },
   ];
   if (listView) return <TaskListRow id={issue.id} kind="issue" projectId={issue.projectId} title={title}
     stage={issue.status} stageLabel={issueStages.find((stage) => stage.id === issue.status)!.label}
-    summary={`${parent ? "Подзадача" : "Задача"} · ${issue.assignee || (issue.threadIds.length ? `Чатов: ${issue.threadIds.length}` : "Без чата")}`}
-    updatedAt={issue.updatedAt} selected={selection?.has(issue.id)} chatOpen={chatOpen} chatActive={chatActive}
-    open={open} toggle={() => toggle(issue.id)} groups={groups}
-    drag={{ onDragStart: (event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(issueDragType, issue.id); },
-      onDragOver: (event) => { if (event.dataTransfer.types.includes(issueDragType)) event.preventDefault(); },
-      onDrop: (event) => {
-        const id = event.dataTransfer.getData(issueDragType);
-        if (id) { event.preventDefault(); event.stopPropagation(); move(id, issue.status, issue.id); }
-      } }}
+    summary={[parent ? "Подзадача" : "Задача", issue.assignee || (!issue.threadIds.length ? "Без чата" : "")].filter(Boolean).join(" · ")}
+    updatedAt={issue.updatedAt} selected={selection?.has(issue.id)} chatOpen={chatOpen} chatActive={chatActive} cardActive={cardActive}
+    open={open} toggle={() => toggle(issue.id)} groups={groups} suppressClick={() => projectActions?.suppressClick() ?? false}
+    workTime={workTime}
+    drag={{ ...drag, ...cardDrop.bindings }}
+    tags={issue.tags}
     signals={<>{waiting ? <span>Ожидает ввод</span> : working ? <span>Агент работает</span> : null}
       {(failed || issue.error) && <span className="text-destructive">Ошибка</span>}{blocked && <span>Заблокирована</span>}
       {archived && <span>Архив</span>}{(issue.priority === "high" || issue.priority === "urgent") && <span>{priorities[issue.priority]}</span>}</>}
@@ -288,36 +332,34 @@ function IssueCard({ issue, issues, index, move, selection, toggle, derive, work
       {!parent && !childCount && !issue.priority && !issue.assignee && !issue.tags.length && !issue.threadIds.length && <p>Дополнительных сведений нет.</p>}
     </>} />;
   return (
-    <article draggable data-selected={selection?.has(issue.id)} data-chat-open={chatOpen} data-chat-active={chatActive}
+    <article {...tags.bindings} {...cardDrop.bindings} {...drag} data-selected={selection?.has(issue.id)} data-chat-open={chatOpen} data-chat-active={chatActive} data-card-active={cardActive}
+      onKeyDown={event => { if (event.target === event.currentTarget && event.key === 'Enter') open(); }}
       data-kanban-card-id={issue.id} data-kanban-kind="issue" data-kanban-project={issue.projectId} data-kanban-stage={issue.status}
-      onClick={(event) => { if (isCardBackgroundClick(event)) open(); }}
+      onClick={(event) => { if (!projectActions?.suppressClick() && isCardBackgroundClick(event)) open(); }}
       onClickCapture={(event) => {
+        if (!event.currentTarget.contains(event.target as Node)) return;
+        if (projectActions?.suppressClick()) { event.preventDefault(); event.stopPropagation(); return; }
         if (!event.ctrlKey && !event.metaKey) return;
         event.preventDefault();
         event.stopPropagation();
         toggle(issue.id);
       }}
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData(issueDragType, issue.id);
-      }}
-      onDragOver={(event) => { if (event.dataTransfer.types.includes(issueDragType)) event.preventDefault(); }}
-      onDrop={(event) => {
-        const id = event.dataTransfer.getData(issueDragType);
-        if (!id) return;
-        event.preventDefault();
-        event.stopPropagation();
-        move(id, issue.status, issue.id);
-      }}
       className="kb-card bg-card">
-      {parent && (
-        <button type="button" onClick={() => tree(parent.id)} title={`Родительская задача · ${issueTitle(parent)}`}
-          className="mb-1 block max-w-full truncate text-left text-xs text-muted-foreground">
-          ↳ {issueTitle(parent)}
-        </button>
-      )}
-      <button type="button" title={title} onClick={open}
-        className="kb-card-title font-medium text-foreground">{title}</button>
+      {cardDrop.active && <span className="kb-drop-label" role="status">{cardDrop.label}</span>}
+      <div className="kb-card-heading">
+        <button type="button" title={title} onClick={open} draggable={!issue.busy}
+          className="kb-card-title font-medium text-foreground">{title}</button>
+        <CardStatus value={activity} open={() => {
+          if (activity.threadId) {
+            openIssue(panel, issue, { threadId: activity.threadId, reuse: true });
+          } else open();
+        }} />
+      </div>
+      <CardActivityLine value={activity} />
+      {workTime}
+      <CardTagDots tags={issue.tags} />
+      {parent && <button type="button" onClick={() => tree(parent.id)} title={`Родительская задача · ${issueTitle(parent)}`}
+        className="kb-card-parent">↳ {issueTitle(parent)}</button>}
       <div className="kb-card-footer">
         <div className="kb-card-meta text-muted-foreground">
           {selection && <input type="checkbox" aria-label={`Выбрать задачу: ${title}`}
@@ -328,22 +370,16 @@ function IssueCard({ issue, issues, index, move, selection, toggle, derive, work
           })}
           {issue.priority && <span className="kb-badge bg-muted text-foreground">{priorities[issue.priority]}</span>}
           {issue.assignee && <span className="kb-badge" title={issue.assignee}>{issue.assignee}</span>}
-          {issue.tags.map((tag) => <TagBadge key={tag} tag={tag} />)}
           {archived && <span className="kb-badge bg-muted">Архив</span>}
           {childCount > 0 && <button type="button" className="kb-badge bg-muted hover:text-foreground" onClick={() => tree(issue.id)}>
             Ветка · {childCount}
           </button>}
-          {issue.threadIds.length > 0 && <span>Чатов · {issue.threadIds.length}</span>}
-          {blocked && <span className="text-amber-700 dark:text-amber-400">Заблокирована</span>}
-          {issue.busy?.kind === "planning" && <span>Готовится план</span>}
-          {waiting ? <span className="text-amber-700 dark:text-amber-400">Ожидает ввод</span>
-            : working ? <span className="text-blue-600 dark:text-blue-400">Агент работает</span> : null}
-          {(failed || issue.error) && <span className="text-destructive">Ошибка</span>}
         </div>
         <div className="kb-card-tools">
-          <CardMenu label={`Действия с задачей: ${title}`} groups={groups} />
+          <CardMenu label={`Действия с задачей: ${title}`} groups={groups} onOpenChange={tags.onMenuOpenChange} />
         </div>
       </div>
+      {tags.tooltip}
     </article>
   );
 }
@@ -354,7 +390,7 @@ function BranchNode({ thread, index, path, start, derive, issueOwners, openTree,
   folded: ReadonlySet<string>; toggle: (id: string) => void;
   selection: ReadonlySet<string> | null; select: (id: string) => void; worktrees: WorktreeStatuses; changeArchive: ChangeArchive;
 }) {
-  const { chatOpen, chatActive } = useChatHighlight([thread.id]);
+  const { chatOpen, chatActive, cardActive } = useChatHighlight([thread.id]);
   const panel = experimental_useAppPanel();
   const navigate = useBbNavigate();
   const deleteActions = useDeleteChatActions(thread);
@@ -365,7 +401,7 @@ function BranchNode({ thread, index, path, start, derive, issueOwners, openTree,
   const open = () => issue ? openIssue(panel, issue, { threadId: thread.id, reuse: true }) : openChatWorkspace(panel, thread.id, thread.displayTitle, true);
   return (
     <li>
-      <div className="kb-tree-node rounded-md p-1 hover:bg-state-hover" data-selected={selection?.has(thread.id)} data-chat-open={chatOpen} data-chat-active={chatActive}
+      <div className="kb-tree-node rounded-md p-1 hover:bg-state-hover" data-selected={selection?.has(thread.id)} data-chat-open={chatOpen} data-chat-active={chatActive} data-card-active={cardActive}
         data-kanban-card-id={thread.id} data-kanban-kind="thread" data-kanban-project={thread.projectId}
         data-kanban-stage={legacyStage[stageOf(thread)]} data-kanban-title={thread.displayTitle}
         onClick={(event) => { if (isCardBackgroundClick(event)) open(); }}
@@ -532,9 +568,11 @@ function OperationDialog({ operation, index, close, changed }: { operation: Oper
           setError("");
           try {
             if (isFork) {
+              const plan = planSchema.parse(await sdk.threads.getPluginMetadata({ threadId: thread.id }));
               const fork = await sdk.threads.fork({
                 sourceThreadId: thread.id,
                 title: title.trim() || undefined,
+                pluginMetadata: { ...plan, tags: tagsForNewCard(plan.tags) },
                 environment: forkWorkspace === "worktree"
                   ? { type: "host", hostId: thread.host?.id, workspace: { type: "managed-worktree", baseBranch: { kind: "default" } } }
                   : forkWorkspace === "personal"
@@ -622,11 +660,59 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
   const portalScope = usePortalScopeProps();
   const rpc = useRpc<typeof issueRpc>();
   const issues = issueQuery.data ?? [];
+  const folderQuery = useProjectFolders();
+  const folders = folderQuery.data ?? [];
+  const [folderTarget, setFolderTarget] = useState<string | null>(null);
+  const [folderTab, setFolderTab] = useState<'assistant' | 'materials' | 'cards'>('assistant');
+  const [folderAction, setFolderAction] = useState<'add' | 'rename' | 'delete' | undefined>();
+  const [folderCreateStage, setFolderCreateStage] = useState<'backlog' | 'todo'>('backlog');
+  const [moveCards, setMoveCards] = useState<string[] | null>(null);
+  const [chatProject, setChatProject] = useState<string | null>(null);
+  const folderReturnFocus = useRef<HTMLButtonElement | null>(null);
+  const moveReturnFocus = useRef<HTMLButtonElement | null>(null);
+  const chatReturnFocus = useRef<HTMLButtonElement | null>(null);
+  const requestMove = (ids: string[], trigger?: HTMLButtonElement | null) => { moveReturnFocus.current = trigger ?? null; setMoveCards(ids); };
+  const relocation = useCardRelocation(issues, async () => { await issueQuery.refetch(); await folderQuery.refetch(); });
+  const [createTarget, setCreateTarget] = useState<string | null>(null);
+  const [openFolders, setOpenFolders] = useState<ReadonlySet<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('thread-kanban:open-folders') ?? '[]')); } catch { return new Set(); }
+  });
+  const toggleFolder = (id: string) => setOpenFolders((previous) => {
+    const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id);
+    try { localStorage.setItem('thread-kanban:open-folders', JSON.stringify([...next])); } catch { /* optional preference */ }
+    return next;
+  });
+  useEffect(() => { try { localStorage.setItem('thread-kanban:open-folders', JSON.stringify([...openFolders])); } catch { /* optional preference */ } }, [openFolders]);
+  const relocateCards: MoveCards = async (ids, target) => {
+    const ok = await relocation.move(ids, target);
+    if (ok) {
+      const destinationStage = target.status ?? (ids.length === 1 ? issues.find(issue => issue.id === ids[0])?.status : undefined);
+      if (destinationStage === 'cancelled') setShowCancelled(true);
+      if (destinationStage) { setFocusedStage(destinationStage); setCollapsedStages(previous => { const next = new Set(previous); next.delete(destinationStage); return next; }); }
+      setOpenFolders(previous => {
+        const next = new Set(previous);
+        ids.forEach(id => {
+          const issue = issues.find(issue => issue.id === id);
+          const folderId = target.folderId === undefined ? issue?.folderId : target.folderId;
+          if (folderId) { next.add(`${folderId}:list`); next.add(`${folderId}:${target.status ?? issue?.status ?? 'todo'}`); }
+        }); return next;
+      });
+      // Membership-only drops can make an empty backlog projection disappear.
+      // Reveal the card in its retained stage instead of leaving it offscreen.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const node = Array.from(surface.current?.querySelectorAll<HTMLElement>('[data-kanban-card-id]') ?? []).find(node => node.dataset.kanbanCardId === ids[0]);
+        node?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }));
+    }
+    return ok;
+  };
+  const relocateDrop: MoveCards = async (ids, target) => { const ok = await relocateCards(ids, target); if (ok && (target.beforeId || target.atEnd)) setSort('manual'); return ok; };
   const [preferences] = useState(readViewPreferences);
   const surface = useRef<HTMLElement>(null);
   const [compact, setCompact] = useState(false);
   const [focusedStage, setFocusedStage] = useState(preferences.focusedStage);
   const [creating, setCreating] = useState(false);
+  const creationGuard = useRef(false);
   const [showCancelled, setShowCancelled] = useState(preferences.showCancelled);
   const [listView, setListView] = useState(preferences.listView);
   const [collapsedStages, setCollapsedStages] = useState(readCollapsedStages);
@@ -724,6 +810,9 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
       return !thread.parentThreadId && parentThreadId ? { ...thread, parentThreadId } : thread;
     })), [data.threads, hidden, archiveParents]);
   const issueOwners = new Map(issues.flatMap((issue) => issue.threadIds.map((id) => [id, issue] as const)));
+  const linkedStates = experimental_useRpcKeyedQuery({ contract: cardActivityRpc, method: 'cardThreadStates',
+    keys: [...issueOwners.keys()].filter(id => !index.byId.has(id)) }).data ?? {};
+  const cardActivities = useBoardActivities([...data.threads, ...Object.values(linkedStates)]);
   const archivedThreads = experimental_useRpcKeyedQuery({
     contract: archiveRpc, method: "archivedThreads", keys: [...issueOwners.keys()],
   }).data ?? {};
@@ -757,6 +846,15 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
   const plans = planning.data ?? {};
   const branchId = /^branch\/(thr_[a-z0-9]+)$/i.exec(subPath)?.[1];
   const issueTreeId = /^issue-tree\/([\da-f-]{36})$/i.exec(subPath)?.[1];
+  const notificationIssueId = /^issue\/([\da-f-]{36})$/i.exec(subPath)?.[1];
+  const openedNotificationIssue = useRef<string | null>(null);
+  useEffect(() => {
+    if (!notificationIssueId) { openedNotificationIssue.current = null; return; }
+    const issue = issues.find(item => item.id === notificationIssueId);
+    if (!issue || openedNotificationIssue.current === notificationIssueId) return;
+    openIssue(panel, issue, { reuse: true });
+    openedNotificationIssue.current = notificationIssueId;
+  }, [notificationIssueId, issues, panel]);
   const branchView = !!branchId || !!issueTreeId;
   const search = query.trim().toLocaleLowerCase("ru");
   // Show the successful response immediately while BB's shared sidebar catches up.
@@ -806,7 +904,8 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
       const blocker = issueById.get(id);
       return blocker && blocker.status !== "done" && blocker.status !== "cancelled";
     })) &&
-    [issue.title, issue.description, issue.notes, issue.assignee, ...issue.tags].join(" ").toLocaleLowerCase("ru").includes(search),
+    [issue.title, issue.description, issue.notes, issue.assignee, ...issue.tags,
+      folders.find((folder) => folder.id === issue.folderId)?.name ?? ''].join(" ").toLocaleLowerCase("ru").includes(search),
   );
   const priorityOrder = Object.keys(priorities);
   const rank = (priority: Plan["priority"]) => priority ? priorityOrder.indexOf(priority) : priorityOrder.length;
@@ -838,7 +937,7 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
   for (const issue of issueMatches) stageCounts.set(issue.status, (stageCounts.get(issue.status) ?? 0) + 1);
   for (const thread of matches) {
     const groupId = groupOf(thread.projectId);
-    if (!projects.has(groupId)) projects.set(groupId, groupId === personalProjectId ? "Personal" : "Проект");
+    if (!projects.has(groupId)) projects.set(groupId, groupId === personalProjectId ? "Personal" : "Раздел");
     const cards = grouped.get(groupId) ?? [];
     cards.push(thread);
     grouped.set(groupId, cards);
@@ -880,32 +979,21 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
     });
   }
   const start: StartOperation = (kind, thread) => setOperation({ kind, thread });
-  async function createIssue(id: string, status: IssueStatus, threadId?: string) {
-    if (creating) return;
-    setCreating(true);
+  async function createIssue(id: string, status: IssueStatus, threadId?: string, folderId?: string) {
+    if (creationGuard.current) return null;
+    creationGuard.current = true; setCreating(true);
     try {
-      const issue = await rpc.call("issueCreate", { projectId: id, status, ...(threadId ? { threadId } : {}) });
+      const issue = await rpc.call("issueCreate", { projectId: id, status, test: false, ...(folderId ? { folderId } : {}), ...(threadId ? { threadId } : {}) });
       setFocusedStage(status);
       setProjectExpansion((previous) => new Map(previous).set(id, true));
       openIssue(panel, issue, { startWithAssistant: !threadId });
       await issueQuery.refetch();
+      return issue;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
+      return null;
     } finally {
-      setCreating(false);
-    }
-  }
-  async function moveIssue(id: string, status: IssueStatus, beforeId?: string) {
-    const source = issues.find((item) => item.id === id);
-    const destination = beforeId ? issues.find((item) => item.id === beforeId) : undefined;
-    if (!source || (destination && groupOf(destination.projectId) !== groupOf(source.projectId))) return;
-    try {
-      await rpc.call("issueMove", {
-        id, status, ...(sort === "manual" && beforeId ? { beforeId } : {}), atEnd: sort === "manual" && !beforeId,
-      });
-      await issueQuery.refetch();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      creationGuard.current = false; setCreating(false);
     }
   }
   function toggleSelection(id: string) {
@@ -921,9 +1009,7 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
     if (!ids.length || bulkPending) return;
     setBulkPending(true);
     try {
-      await rpc.call("issueMoveMany", { ids, status });
-      setSelection(null);
-      await issueQuery.refetch();
+      if (await relocateCards(ids, { status })) setSelection(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -953,7 +1039,9 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
   const toggleSelectionMode = () => setSelection(selection ? null : new Set());
 
   return (
-    <main ref={surface} data-kanban-layout={listView ? "list" : compact ? "stage" : "board"}
+    <TagColorsProvider><CardActivityContext.Provider value={cardActivities}><ProjectCardActions issues={issues} folders={folders}
+      move={relocateCards} drop={relocateDrop} sectionOf={groupOf} openMove={requestMove}
+      openChatProject={(id, trigger) => { chatReturnFocus.current = trigger ?? null; setChatProject(id); }}><main ref={surface} tabIndex={-1} data-kanban-layout={listView ? "list" : compact ? "stage" : "board"}
       className="kb-shell flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
       {branchView ? (
         <div className="kb-toolbar kb-tree-toolbar border-b border-border">
@@ -990,17 +1078,17 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
               <Input value={query} onChange={(event) => setQuery(event.target.value)}
                 className="h-9 w-full bg-background text-foreground" placeholder="Поиск по задачам, чатам и меткам" aria-label="Найти задачу" />
             </div>
-            <select aria-label="Проект" value={projectId} onChange={(event) => {
+            <select aria-label="Раздел" value={projectId} onChange={(event) => {
               setProjectId(event.target.value);
               setTagFilter("");
               setAssigneeFilter("");
             }} className={filterSelect}>
-              <option value="">Все проекты</option>
+              <option value="">Все разделы</option>
               {Array.from(projects, ([id, name]) => <option key={id} value={id}>{name}</option>)}
             </select>
-            <Button variant="outline" size="sm" className="kb-create-project" aria-label="Создать проект"
+            <Button variant="outline" size="sm" className="kb-create-project" aria-label="Создать раздел"
               onClick={() => setCreatingProject(true)}>
-              <Icon name="FolderPlus" /><span className="kb-create-project-label">Создать проект</span>
+              <Icon name="FolderPlus" /><span className="kb-create-project-label">Создать раздел</span>
             </Button>
             <Popover.Root>
               <Popover.Trigger asChild title={activeFilters ? `Поиск и фильтры: ${activeFilters}` : "Поиск и фильтры"}>
@@ -1110,6 +1198,8 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
       {selection && (
         <div className="kb-selection-bar border-b border-border text-xs" role="group" aria-label="Действия с выбранными карточками">
           <span className="tabular-nums text-muted-foreground">Выбрано · {selectedIssues.length + selectedThreads.length}</span>
+          {!branchView && <Button size="sm" variant="outline" disabled={relocation.pending || !selectedIssues.length || !!selectedThreads.length}
+            onClick={event => requestMove(selectedIssues, event.currentTarget)}>Проект и этап…</Button>}
           {!branchView && <select aria-label="Переместить выбранные задачи" value="" disabled={bulkPending || !issueMatches.some((issue) => selection.has(issue.id))}
             onChange={(event) => { if (event.target.value) void moveSelected(issueStatus.parse(event.target.value)); }}
             className="rounded-md border border-input bg-background px-2 py-1">
@@ -1134,7 +1224,7 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
             if (!id) return;
             event.preventDefault();
             const status = issueStatus.parse(stage);
-            void moveIssue(id, status);
+            void relocateDrop([id], { status });
             setFocusedStage(status);
           }} />
         <div role="group" aria-label="Этапы доски" className="kb-stage-picker border-b border-border">
@@ -1148,7 +1238,7 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
                 const id = event.dataTransfer.getData(issueDragType);
                 if (!id) return;
                 event.preventDefault();
-                void moveIssue(id, stage.id);
+                void relocateDrop([id], { status: stage.id });
                 setFocusedStage(stage.id);
               }}>
               <StageHeading label={stage.label} count={stageCounts.get(stage.id) ?? 0} />
@@ -1188,13 +1278,13 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
                     const folded = collapsedStages.has(column.id);
                     const count = stageCounts.get(column.id) ?? 0;
                     return (
-                      <button key={column.id} type="button" aria-expanded={!folded} data-folded={folded}
+                      <StageDropButton key={column.id} status={column.id} type="button" aria-expanded={!folded} data-folded={folded}
                         aria-label={`${folded ? "Развернуть" : "Свернуть"} колонку «${column.label}», карточек ${count}`}
                         title={`${column.label} · ${count}`}
                         onClick={() => toggleStage(column.id)}
                         className="kb-column-toggle kb-stage-heading" data-stage={column.id}>
                         <StageHeading label={column.label} count={count} folded={folded} />
-                      </button>
+                      </StageDropButton>
                     );
                   })}
                 </div>
@@ -1202,24 +1292,38 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
               {Array.from(projects, ([id, name]) => {
                 if (projectId && projectId !== id) return null;
                 const cards = grouped.get(id) ?? [];
-                const projectIssues = issueMatches.filter((issue) => groupOf(issue.projectId) === id);
+                const allProjectIssues = issueMatches.filter((issue) => groupOf(issue.projectId) === id);
+                const projectIssues = allProjectIssues.filter((issue) => !issue.folderId || !folders.some((folder) => folder.id === issue.folderId));
+                const projectFolders = folders.filter((folder) => groupOf(folder.sectionId) === id &&
+                  (!isFiltered || allProjectIssues.some((issue) => issue.folderId === folder.id) || folder.name.toLocaleLowerCase('ru').includes(search) && !tagFilter && !assigneeFilter && !priorityFilter && !attentionOnly && !hideBlocked));
                 const renderIssue = (issue: Issue) => <IssueCard key={issue.id} issue={issue} issues={issues} index={index}
-                  move={moveIssue} selection={selection} toggle={toggleSelection} derive={setDerivation}
-                  worktrees={worktrees} remove={requestDelete} chatActions={linkedChatActions} archived={isIssueArchived(issue)} listView={listView} />;
+                  selection={selection} toggle={toggleSelection} derive={setDerivation}
+                  worktrees={worktrees} remove={requestDelete} chatActions={linkedChatActions} archived={isIssueArchived(issue)} threadStates={linkedStates} listView={listView} />;
                 const renderThread = (thread: Thread) => <ThreadCard key={thread.id} thread={thread} index={index} start={start}
                   plan={plans[thread.id]} createIssue={() => void createIssue(thread.projectId, legacyStage[stageOf(thread)], thread.id)} derive={setDerivation}
                   selection={selection} toggle={toggleSelection} worktrees={worktrees} changeArchive={changeArchive} listView={listView} />;
+                const renderFolder = (folder: typeof folders[number], stage: IssueStatus | null) => {
+                  const key = `${folder.id}:${stage ?? 'list'}`;
+                  const members = allProjectIssues.filter((issue) => issue.folderId === folder.id && (!stage || issue.status === stage));
+                  return <ProjectFolderCard key={key} folder={folder} stage={stage}
+                    matching={members.length} expanded={openFolders.has(key)} toggle={() => toggleFolder(key)} creating={creating}
+                    manage={(tab, action, trigger) => { folderReturnFocus.current = trigger ?? null; setFolderTab(tab); setFolderAction(action); setFolderCreateStage(stage === 'backlog' ? 'backlog' : 'todo'); setFolderTarget(folder.id); }}
+                    create={() => { setOpenFolders(previous => new Set(previous).add(`${folder.id}:${stage === 'backlog' ? 'backlog' : 'todo'}`).add(`${folder.id}:list`));
+                      void createIssue(folder.sectionId, stage === 'backlog' ? 'backlog' : 'todo', undefined, folder.id); }}>
+                    {members.map(renderIssue)}
+                  </ProjectFolderCard>;
+                };
                 const listItems = listView ? [
                   ...projectIssues.map((issue) => ({ id: issue.id, updatedAt: issue.updatedAt, createdAt: issue.createdAt,
                     priority: issue.priority, order: issue.order, stage: issue.status, render: () => renderIssue(issue) })),
                   ...cards.map((thread) => ({ id: thread.id, updatedAt: thread.updatedAt, createdAt: thread.createdAt,
                     priority: plans[thread.id]?.priority, stage: legacyStage[stageOf(thread)], render: () => renderThread(thread) })),
                 ].sort((a, b) => compareListItems(a, b, sort)) : [];
-                if (isFiltered && !cards.length && !projectIssues.length) return null;
+                if (isFiltered && !cards.length && !projectIssues.length && !projectFolders.length) return null;
                 const visibleCount = compact && !listView
                   ? cards.filter((card) => legacyStage[stageOf(card)] === currentStage.id).length +
-                    projectIssues.filter((issue) => issue.status === currentStage.id).length
-                  : cards.length + projectIssues.length;
+                    projectIssues.filter((issue) => issue.status === currentStage.id).length + projectFolders.length
+                  : cards.length + projectIssues.length + projectFolders.length;
                 const expanded = projectExpansion.get(id) ?? visibleCount > 0;
                 return (
                   <section key={id} className="kb-project" aria-label={name}>
@@ -1232,18 +1336,19 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
                           <span className="min-w-0 truncate" title={name}>{name}</span>
                           <span className="kb-badge bg-muted tabular-nums text-muted-foreground">{visibleCount}</span>
                         </Button>
-                        <CardMenu label={`Действия с проектом: ${name}`} groups={[...(listView ? [{ label: "Создать", items: [
+                        <CardMenu label={`Действия с разделом: ${name}`} groups={[...(listView ? [{ label: "Создать", items: [
+                          { label: "Задачу или проект…", action: () => setCreateTarget(id) },
                           { label: "Задачу в бэклоге", disabled: creating || !!issueQuery.error, action: () => void createIssue(id, "backlog") },
                           { label: "Задачу к выполнению", disabled: creating || !!issueQuery.error, action: () => void createIssue(id, "todo") },
                           { label: "Новый чат", action: () => navigate.toCompose({ projectId: id, focusPrompt: true }) },
                         ] }] : []), {
-                          label: data.projects.find((project) => project.id === id)?.isPersonal ? "Personal — системный проект" : "Управление проектом",
+                          label: data.projects.find((project) => project.id === id)?.isPersonal ? "Personal — системный раздел" : "Управление разделом",
                           items: [
                             { label: "Переименовать", disabled: !data.projects.some((project) => project.id === id && !project.isPersonal),
                               action: () => setProjectTarget({ id, name, kind: "rename" }) },
-                            ...(id === personalProjectId ? [{ label: "Вернуть проект в канбан…", disabled: !restoreProjects.length,
+                            ...(id === personalProjectId ? [{ label: "Вернуть раздел в канбан…", disabled: !restoreProjects.length,
                               action: () => setProjectTarget({ id, name, kind: "restore" }) }] : [{
-                              label: "Убрать проект…", disabled: !personalGroups.data || !data.projects.some((project) => project.id === id && !project.isPersonal),
+                              label: "Убрать раздел…", disabled: !personalGroups.data || !data.projects.some((project) => project.id === id && !project.isPersonal),
                               action: () => setProjectTarget({ id, name, kind: "remove" }),
                             }]),
                             { label: "Поднять выше", disabled: movingProject || !projectOrder.data || !personalGroups.data || projectIds.indexOf(id) <= 0,
@@ -1255,8 +1360,8 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
                       </div>
                       <div className="kb-project-actions">
                         <Button variant="outline" size="sm" className="gap-1 px-2" disabled={creating || !!issueQuery.error}
-                          aria-label="+ Задача" onClick={() => void createIssue(id, "backlog")}>
-                          <KanbanIcon name="plus" /> Задача
+                          aria-label="Создать задачу или проект" onClick={() => setCreateTarget(id)}>
+                          <KanbanIcon name="plus" /> Создать
                         </Button>
                         <Button variant="ghost" size="sm" className="gap-1 px-2 text-muted-foreground" aria-label="+ Чат"
                           onClick={() => navigate.toCompose({ projectId: id, focusPrompt: true })}>
@@ -1266,33 +1371,33 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
                     </div>
                     {expanded && (
                       <div className={`kb-project-grid ${grid}`} style={gridStyle}>
-                        {listView && visibleCount === 0 && <p className="kb-list-empty">В проекте пока нет задач. Создайте задачу или чат в заголовке проекта.</p>}
-                        {listView ? listItems.map((item) => item.render()) : shownStages.map((column) => {
+                        {listView && visibleCount === 0 && <p className="kb-list-empty">В разделе пока нет задач. Создайте проект, задачу или чат в заголовке раздела.</p>}
+                        {listView ? <>{projectFolders.map((folder) => renderFolder(folder, null))}
+                          <CardDropZone target={{ sectionId: id, folderId: null, atEnd: true, positionScope: 'project' }} className="kb-ungroup-drop" label="Без проекта" aria-label={`Перенести без проекта · ${name}`} />
+                          {listItems.map((item) => item.render())}</> : shownStages.map((column) => {
                           const lane = cards.filter((card) => legacyStage[stageOf(card)] === column.id);
                           const issueLane = projectIssues.filter((issue) => issue.status === column.id);
+                          const folderLane = projectFolders.filter((folder) =>
+                            allProjectIssues.some((issue) => issue.folderId === folder.id && issue.status === column.id) || !folder.count && column.id === 'backlog');
                           const folded = showColumns && collapsedStages.has(column.id);
                           const canCreate = initialIssueStatus.safeParse(column.id).success;
-                          const count = lane.length + issueLane.length;
+                          const count = lane.length + issueLane.length + folderLane.length;
                           return (
-                            <div key={column.id} role="group" aria-label={`${name} · ${column.label}`} data-folded={folded}
+                            <CardDropZone key={column.id} target={{ sectionId: id, status: column.id, atEnd: true }} role="group" aria-label={`${name} · ${column.label}`} data-folded={folded}
                               className={`kb-lane ${folded ? "bg-muted/20" : "flex flex-col gap-1.5 bg-muted/30"}`}
-                              onDragOver={(event) => { if (event.dataTransfer.types.includes(issueDragType)) event.preventDefault(); }}
-                              onDrop={(event) => {
-                                const issueId = event.dataTransfer.getData(issueDragType);
-                                if (issueId && issues.some((item) => item.id === issueId && groupOf(item.projectId) === id)) {
-                                  event.preventDefault();
-                                  void moveIssue(issueId, column.id);
-                                }
-                              }}>
+                              >
                               {folded ? (
                                 <button type="button" onClick={() => toggleStage(column.id)}
-                                  aria-label={`Развернуть колонку «${column.label}» в проекте ${name}, карточек ${count}`}
+                                  aria-label={`Развернуть колонку «${column.label}» в разделе ${name}, карточек ${count}`}
                                   className="kb-rail text-xs text-muted-foreground">
                                   <span className="kb-rail-label text-[11px]">{column.label}</span>
                                   <span className="kb-badge bg-muted tabular-nums text-foreground">{count}</span>
                                 </button>
                               ) : (
                                 <>
+                                  {folderLane.map((folder) => renderFolder(folder, column.id))}
+                                  <CardDropZone target={{ sectionId: id, folderId: null, atEnd: true, positionScope: 'project' }}
+                                    className="kb-ungroup-drop" label="Без проекта" aria-label={`Перенести без проекта · ${column.label}`} />
                                   {issueLane.map(renderIssue)}
                                   {lane.map(renderThread)}
                                   {count === 0 && compact && !canCreate && <p className="px-2 py-1.5 text-xs text-muted-foreground">В этом этапе пока пусто.</p>}
@@ -1306,7 +1411,7 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
                                   )}
                                 </>
                               )}
-                            </div>
+                            </CardDropZone>
                           );
                         })}
                       </div>
@@ -1340,8 +1445,8 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
         setCreatedProject(project);
         setProjectExpansion((previous) => new Map(previous).set(project.id, true));
         refreshProjects();
-        toast.success(`Проект «${project.name}» создан`, { action: {
-          label: "Показать проект",
+        toast.success(`Раздел «${project.name}» создан`, { action: {
+          label: "Показать раздел",
           onClick: () => {
             setProjectId(project.id);
             setQuery("");
@@ -1354,6 +1459,20 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
           },
         } });
       }} />}
+      {folderQuery.error && <p role="alert">Не удалось загрузить проекты: {String(folderQuery.error)}</p>}
+      {createTarget && <CreateCardDialog sectionId={createTarget} close={() => setCreateTarget(null)}
+        createIssue={(status) => createIssue(createTarget, status)} created={(folder) => { void folderQuery.refetch(); setFolderTab('assistant'); setFolderAction(undefined); setFolderCreateStage('backlog'); setFolderTarget(folder.id); setFocusedStage('backlog'); setProjectExpansion((previous) => new Map(previous).set(createTarget, true)); }} />}
+      {folderTarget && <ProjectFolderDialog key={folderTarget} id={folderTarget} initialTab={folderTab} initialAction={folderAction} folders={folders} issues={issues} close={() => setFolderTarget(null)}
+        refreshCards={() => issueQuery.refetch()}
+        returnFocus={folderReturnFocus.current}
+        openCard={issue => { setFolderTarget(null); openIssue(panel, issue, { reuse: true }); }}
+        createIssue={(folder) => createIssue(folder.sectionId, folderCreateStage, undefined, folder.id)} />}
+      {moveCards && moveCards.some(id => issues.some(issue => issue.id === id)) && <MoveCardsDialog cards={issues.filter(issue => moveCards.includes(issue.id))}
+        folders={folders} move={relocateCards} returnFocus={moveReturnFocus.current} close={() => setMoveCards(null)} />}
+      {chatProject && index.byId.has(chatProject) && <ChatProjectDialog title={index.byId.get(chatProject)!.displayTitle}
+        returnFocus={chatReturnFocus.current}
+        folders={folders.filter(folder => folder.sectionId === index.byId.get(chatProject)!.projectId)} close={() => setChatProject(null)}
+        create={folderId => createIssue(index.byId.get(chatProject)!.projectId, legacyStage[stageOf(index.byId.get(chatProject)!)], chatProject, folderId)} />}
       {projectTarget && <ProjectDialog key={`${projectTarget.kind}:${projectTarget.id}`} target={projectTarget}
         restoreProjects={restoreProjects} close={() => setProjectTarget(null)} changed={(mode) => {
           refreshProjects();
@@ -1377,7 +1496,7 @@ function KanbanBoard({ subPath, issueQuery }: { subPath: string; issueQuery: Ret
         }
         void issueQuery.refetch();
       }} />}
-    </main>
+    </main></ProjectCardActions></CardActivityContext.Provider></TagColorsProvider>
   );
 }
 

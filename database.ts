@@ -3,6 +3,7 @@ import { derivationMigration } from './derive-server';
 import { mergeMigration } from './merge-resolution';
 import { archiveMigration } from './chat-archive-server';
 import { notificationMigrations } from './notification-migrations';
+import { projectFoldersMigration } from './project-folders-migration';
 
 export function kanbanDatabase(bb: BbPluginApi) {
   const db = bb.storage.database();
@@ -13,6 +14,8 @@ export function kanbanDatabase(bb: BbPluginApi) {
     archiveMigration,
     "CREATE TABLE IF NOT EXISTS kanban_review_workers (issue_id TEXT PRIMARY KEY, worker_id TEXT UNIQUE NOT NULL, request TEXT NOT NULL, revision TEXT NOT NULL)",
     ...notificationMigrations,
+    'CREATE TABLE IF NOT EXISTS kanban_tag_colors (tag TEXT PRIMARY KEY, color TEXT NOT NULL)',
+    projectFoldersMigration,
   ]);
   return db;
 }

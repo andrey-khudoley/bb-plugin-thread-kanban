@@ -25,7 +25,6 @@ export function DeriveDialog({ request: { selection, trigger }, close, start }: 
 }) {
   const [open, setOpen] = useState(true);
   const [instruction, setInstruction] = useState("");
-  const [test, setTest] = useState(false);
   const decompose = selection.mode === "decompose";
   const title = decompose ? "Сделать декомпозицию" : "Породить задачу";
 
@@ -43,7 +42,7 @@ export function DeriveDialog({ request: { selection, trigger }, close, start }: 
         <form className="space-y-3" onSubmit={(event) => {
           event.preventDefault();
           if (!decompose && !instruction.trim()) return;
-          start({ ...selection, test }, instruction.trim());
+          start({ ...selection, test: false }, instruction.trim());
           setOpen(false);
         }}>
           <label className="block space-y-1.5 text-sm">
@@ -56,10 +55,6 @@ export function DeriveDialog({ request: { selection, trigger }, close, start }: 
           <p className="text-xs text-muted-foreground">{decompose
             ? "Если оставить поле пустым, агент разберёт задачу целиком. Подзадачи появятся в её дереве."
             : "Агент использует исходный контекст, подготовит план и промпт запуска, затем добавит подзадачу в дерево."}</p>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={test} onChange={(event) => setTest(event.target.checked)} />
-            {decompose ? "Пометить подзадачи тегом Test" : "Пометить задачу тегом Test"}
-          </label>
           <DialogFooter>
             <Button type="button" size="sm" variant="outline" onClick={() => setOpen(false)}>Отмена</Button>
             <Button type="submit" size="sm" disabled={!decompose && !instruction.trim()}>

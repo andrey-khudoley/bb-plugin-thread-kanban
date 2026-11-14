@@ -18,9 +18,13 @@ export function notificationStore(bb: BbPluginApi) {
             THEN (SELECT value FROM config WHERE key = 'clearedBefore') ELSE NULL END)`)
         .run(notice).changes > 0;
     },
-    list() {
-      const notices = db.prepare('SELECT * FROM notices WHERE dismissedAt IS NULL AND readAt IS NULL ORDER BY createdAt DESC, id DESC LIMIT 200').all() as Notice[];
-      const unread = (db.prepare('SELECT count(*) AS count FROM notices WHERE readAt IS NULL AND dismissedAt IS NULL').get() as {count: number}).count;
+    unreadThreadIds() {
+      return (db.prepare('SELECT DISTINCT threadId FROM notices WHERE dismissedAt IS NULL AND readAt IS NULL').all() as { threadId: string }[]).map(row => row.threadId);
+    },
+    list(project: (notice: Notice) => Notice | null = notice => notice) {
+      const visible = (db.prepare('SELECT * FROM notices WHERE dismissedAt IS NULL AND readAt IS NULL ORDER BY createdAt DESC, id DESC').all() as Notice[])
+        .flatMap(notice => { const target = project(notice); return target ? [target] : []; });
+      const notices = visible.slice(0, 200), unread = visible.length;
       const coveredThreads = (db.prepare('SELECT threadId, state FROM scans').all() as { threadId: string; state: string }[])
         .flatMap(({ threadId, state }) => {
           const candidate = (JSON.parse(state) as ScanState).candidate;

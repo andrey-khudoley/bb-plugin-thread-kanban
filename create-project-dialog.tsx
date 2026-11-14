@@ -46,9 +46,9 @@ export function CreateProjectDialog({ close, created }: {
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [sdk, attempt]);
-  const nameError = projectName.safeParse(name).success ? "" : "Введи название проекта.";
+  const nameError = projectName.safeParse(name).success ? "" : "Введи название раздела.";
   const folder = path.trim();
-  const pathError = !folder ? "Укажи папку проекта." : !/^(?:[a-z]:[\\/]|\/|\\\\[^\\]+\\[^\\]+)/i.test(folder)
+  const pathError = !folder ? "Укажи папку раздела." : !/^(?:[a-z]:[\\/]|\/|\\\\[^\\]+\\[^\\]+)/i.test(folder)
     ? "Укажи полный путь к папке на выбранном компьютере." : "";
   const connected = machines.some((machine) => machine.id === hostId && machine.status === "connected");
   async function save() {
@@ -88,12 +88,12 @@ export function CreateProjectDialog({ close, created }: {
       }}>
       <form noValidate aria-busy={pending} onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <DialogHeader>
-          <DialogTitle>Создать проект</DialogTitle>
-          <DialogDescription>Введи название и укажи существующую папку проекта на подключённом компьютере.</DialogDescription>
+          <DialogTitle>Создать раздел</DialogTitle>
+          <DialogDescription>Введи название и укажи существующую папку раздела на подключённом компьютере.</DialogDescription>
         </DialogHeader>
         <div className="my-4 space-y-4">
           <div className="space-y-1">
-            <label htmlFor="kb-create-project-name">Название проекта</label>
+            <label htmlFor="kb-create-project-name">Название раздела</label>
             <Input ref={nameInput} id="kb-create-project-name" autoFocus required value={name} disabled={pending}
               aria-invalid={submitted && !!nameError} aria-describedby={submitted && nameError ? "kb-create-name-error" : undefined}
               onChange={(event) => setName(event.target.value)} />
@@ -114,7 +114,7 @@ export function CreateProjectDialog({ close, created }: {
             {!loading && (loadError || !connected) && <Button type="button" variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>Обновить компьютеры</Button>}
           </div>
           <div className="space-y-1">
-            <label htmlFor="kb-create-project-path">Папка проекта</label>
+            <label htmlFor="kb-create-project-path">Папка раздела</label>
             <Input ref={pathInput} id="kb-create-project-path" required value={path} disabled={pending}
               placeholder="Полный путь к существующей папке" spellCheck={false}
               aria-invalid={submitted && !!pathError} aria-describedby={submitted && pathError ? "kb-create-path-error" : undefined}
@@ -122,10 +122,10 @@ export function CreateProjectDialog({ close, created }: {
             {submitted && pathError && <p id="kb-create-path-error" role="alert" className="text-sm text-destructive">{pathError}</p>}
           </div>
         </div>
-        {error && <p role="alert" className="my-3 break-words text-sm text-destructive">Не удалось создать проект: {error}</p>}
+        {error && <p role="alert" className="my-3 break-words text-sm text-destructive">Не удалось создать раздел: {error}</p>}
         <DialogFooter>
           <Button type="button" variant="outline" disabled={pending} onClick={closeDialog}>Отмена</Button>
-          <Button type="submit" disabled={pending || loading || !connected || !!loadError}>{pending ? "Создаю…" : "Создать проект"}</Button>
+          <Button type="submit" disabled={pending || loading || !connected || !!loadError}>{pending ? "Создаю…" : "Создать раздел"}</Button>
         </DialogFooter>
       </form>
     </DialogContent>

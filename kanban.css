@@ -483,7 +483,7 @@
   width: 100%;
   max-width: 39rem;
   min-width: 0;
-  padding: 6px 7px 4px;
+  padding: 10px 11px 7px;
   border: 1px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
@@ -511,15 +511,15 @@
   box-shadow: 0 2px 12px -2px color-mix(in srgb, var(--primary) 34%, transparent),
     inset 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent);
 }
-/* Keep the active accent above the shared open-chat rule, including during reloads. */
-:is(.kb-card, .kb-tree-node)[data-chat-open="true"][data-chat-active="true"] {
+/* Keep the active accent above the shared open-chat rule, including for cards without a chat. */
+:is(.kb-card, .kb-tree-node)[data-card-active="true"] {
   background-image: linear-gradient(color-mix(in srgb, var(--primary) 13%, transparent), color-mix(in srgb, var(--primary) 13%, transparent));
   box-shadow: 0 2px 12px -2px color-mix(in srgb, var(--primary) 42%, transparent),
     inset 0 0 0 1px color-mix(in srgb, var(--primary) 48%, transparent);
 }
 @media (forced-colors: active) {
   :is(.kb-card, .kb-tree-node)[data-chat-open="true"] { border-inline-start: 3px solid Highlight; }
-  :is(.kb-card, .kb-tree-node)[data-chat-open="true"][data-chat-active="true"] { border-color: Highlight; }
+  :is(.kb-card, .kb-tree-node)[data-card-active="true"] { border-color: Highlight; }
 }
 .kb-card-title {
   display: -webkit-box;
@@ -785,6 +785,79 @@
   color: var(--muted-foreground);
   font-size: 12px;
 }
+.kb-card-heading { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.kb-card-heading > .kb-card-title { flex: 1; font-size: 13px; line-height: 19px; height: 38px; font-weight: 600; }
+.kb-card-status {
+  display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px;
+  margin: -2px -3px 0 0; border-radius: 5px; color: var(--muted-foreground); cursor: pointer;
+}
+.kb-card-status:hover { background: var(--muted); }
+.kb-card-status[data-state="working"] { color: light-dark(#2563aa, #83b9f6); }
+.kb-card-status[data-state="waiting"] { color: light-dark(#865400, #e8bc72); }
+.kb-card-status[data-state="error"] { color: var(--destructive); }
+.kb-card-status[data-state="done"] { color: light-dark(#26744b, #8acba1); }
+.kb-card-activity {
+  display: flex; align-items: center; height: 20px; min-width: 0; margin-top: 5px;
+  color: var(--muted-foreground); font-size: 11px; line-height: 18px;
+}
+.kb-card-activity > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-card-activity[data-state="working"] { color: light-dark(#32699c, #9dbddf); }
+.kb-card-activity[data-state="error"] { color: var(--destructive); }
+.kb-card-work-time {
+  display: flex; align-items: center; min-width: 0; height: 20px;
+  color: light-dark(#32699c, #9dbddf); font-size: 11px; line-height: 18px;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.kb-card-work-value { display: inline-block; min-width: 9ch; }
+.kb-list-state:has(.kb-card-work-time) > .kb-list-status { display: none; }
+.kb-card-parent {
+  display: block; width: 100%; min-width: 0; margin-top: 4px; overflow: hidden;
+  text-align: left; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; line-height: 16px;
+  color: var(--muted-foreground);
+}
+.kb-card-parent:hover { color: var(--foreground); }
+.kb-card:focus-visible, .kb-card :is(button, .kb-card-activity):focus-visible {
+  outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px;
+}
+.kb-card-tag-dots { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; margin-top: 5px; }
+.kb-card-tag-dot { display: block; flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px #0002; }
+.kb-tag-color-editor { min-width: 0; font-size: 12px; }
+.kb-detail-metadata > .kb-tag-color-editor { grid-column: 1 / -1; }
+.kb-tag-color-editor summary { cursor: pointer; }
+.kb-tag-color-editor p { margin-block: 6px; color: var(--muted-foreground); }
+.kb-tag-color-editor [role="alert"] { color: var(--destructive); }
+.kb-tag-color-options { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-block: 8px; }
+.kb-tag-color-option { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.kb-tag-color-option label { display: flex; align-items: center; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.kb-tag-color-option input { flex: none; width: 26px; height: 26px; padding: 1px; cursor: pointer; }
+.kb-tag-color-option button { flex: none; font-size: 11px; }
+.kb-card-tags {
+  position: fixed; z-index: 100; width: max-content; max-width: min(320px, calc(100vw - 24px));
+  max-height: min(170px, calc(100dvh - 24px)); overflow-y: auto; overscroll-behavior: contain;
+  padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--popover); color: var(--popover-foreground); box-shadow: 0 5px 20px #0003;
+  font: 11px/1.4 "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+.kb-card-tags-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-weight: 600; }
+.kb-card-tags-heading > span { color: var(--muted-foreground); font-weight: 400; }
+.kb-card-tags-items { display: flex; flex-wrap: wrap; gap: 5px; }
+.kb-card-tags-items .kb-badge { white-space: normal; overflow-wrap: anywhere; }
+.kb-card-tags[data-chat-preview="true"] {
+  width: min(380px, calc(100vw - 24px)); max-width: calc(100vw - 24px);
+  max-height: min(360px, calc(100dvh - 24px));
+}
+.kb-card-chat-preview {
+  min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: color-mix(in srgb, var(--muted) 35%, var(--popover));
+}
+.kb-card-tags-items + .kb-card-chat-preview { margin-top: 10px; }
+.kb-card-chat-heading { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 7px; color: var(--muted-foreground); font-size: 10px; }
+.kb-card-chat-lines { min-height: 128px; }
+.kb-card-chat-line { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 6px; height: 16px; line-height: 16px; }
+.kb-card-chat-role { color: var(--muted-foreground); font-size: 9px; }
+.kb-card-chat-line[data-role="assistant"] > .kb-card-chat-role { color: light-dark(#32699c, #9dbddf); }
+.kb-card-chat-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; user-select: text; }
+.kb-card-chat-empty { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 16px; }
 .kb-detail-chat-picker select {
   flex: 1 1 13rem;
   color: var(--foreground);

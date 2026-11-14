@@ -13,7 +13,7 @@ export const uiReport = z.object({
   state: z.json().refine((value) => JSON.stringify(value).length <= 64000, "UI state exceeds 64 KB"),
   cards: z.array(z.object({ id, kind: z.string().max(30), projectId: z.string().max(160),
     stage: z.string().max(30), title: z.string().max(300), inViewport: z.boolean(), chatOpen: z.boolean().default(false),
-    chatActive: z.boolean().default(false),
+    chatActive: z.boolean().default(false), cardActive: z.boolean().default(false),
     x: z.number(), y: z.number(), width: z.number(), height: z.number() }).strict()).max(500),
   controls: z.array(z.object({ role: z.string().max(30), name: z.string().max(200), disabled: z.boolean(),
     expanded: z.string().max(10).nullable(), selected: z.string().max(10).nullable() }).strict()).max(300),

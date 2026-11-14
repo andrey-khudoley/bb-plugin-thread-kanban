@@ -52,6 +52,7 @@ export function collectAgentUi(pluginId: string, windowId: string, requestId: st
       title: (element.querySelector(".kb-card-title")?.textContent ?? element.getAttribute("data-kanban-title") ?? "").trim().slice(0, 300),
       inViewport: inViewport(element), chatOpen: element.getAttribute("data-chat-open") === "true",
       chatActive: element.getAttribute("data-chat-active") === "true",
+      cardActive: element.getAttribute("data-card-active") === "true",
       x: rect.x, y: rect.y, width: rect.width, height: rect.height };
   });
   const controls = elements('button, [role="button"], [role="tab"], input:not([type="password"]), select, [role="menuitem"], [role="checkbox"]').map((element) => ({
@@ -114,7 +115,7 @@ export function KanbanAgentBridge() {
     report.current = (requestId) => { void send(requestId); };
     const observer = new MutationObserver(schedule);
     observer.observe(document.body, { subtree: true, childList: true, attributes: true,
-      attributeFilter: ["data-state", "data-kanban-layout", "data-chat-open", "data-chat-active", "aria-expanded", "aria-selected", "hidden"] });
+      attributeFilter: ["data-state", "data-kanban-layout", "data-chat-open", "data-chat-active", "data-card-active", "aria-expanded", "aria-selected", "hidden"] });
     const onError = (event: ErrorEvent) => { errors.current = [...errors.current, event.message.slice(0, 2000)].slice(-20); schedule(); };
     const onRejection = (event: PromiseRejectionEvent) => {
       errors.current = [...errors.current, String(event.reason instanceof Error ? event.reason.message : event.reason).slice(0, 2000)].slice(-20); schedule();

@@ -87,7 +87,7 @@ test("generates scoped, nested tasks with verified context and a fresh launch", 
     assert.equal(child.origin.issueId, first.id);
     assert.deepEqual(child.tags, ["релиз"]);
 
-    await assert.rejects(call("issueStart", { id: first.id, worktree: true }), /Git worktree доступен в Git-проекте/);
+    await assert.rejects(call("issueStart", { id: first.id, worktree: true }), /Git worktree доступен в Git-разделе/);
     const launch = await call("issueStart", { id: first.id, worktree: false });
     assert.equal(launch.threadId, "thr_launch");
     const spawn = harness.inspection.sdk.callsTo("threads.spawn").map(([args]) => args);
